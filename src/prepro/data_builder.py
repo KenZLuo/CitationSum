@@ -10,7 +10,7 @@ import re
 import pandas as pd
 import dgl
 import subprocess
-from collections import Counter
+from collections import Counter, deque
 from os.path import join as pjoin
 from nltk.tokenize import sent_tokenize, word_tokenize
 
@@ -189,7 +189,7 @@ def _k_hop_neighbor(paper_id, n_hop, max_neighbor, graph_strut_dict):
 
     return sub_graph
 
-def generate_graph_inputs(graph_struct, graph_strut_dict):
+def generate_graph_inputs(args, graph_struct, graph_strut_dict):
     graph_inputs = [clean(graph_strut_dict[pid][args.graph_input_type]) for pid in graph_struct]
     graph_inputs_tokenize = []
     for input in graph_inputs[1:]:
@@ -259,7 +259,7 @@ def format_cite(args):
         with open(source_txt_file, 'r') as f:
             json_main = list(f)
         
-        for row in tqdm(json_main):
+        for row in tqdm(json_main[:200]):
             row = json.loads(row)
             pid = row['paper_id']
             abstract = [word_tokenize(t) for t in sent_tokenize(clean(row['abstract']))]
@@ -267,10 +267,10 @@ def format_cite(args):
 
             if args.setting == "transductive":
                 sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                graph_text = generate_graph_inputs(sub_graph_dict, graph_strut_dict)
+                graph_text = generate_graph_inputs(args,ub_graph_dict, graph_strut_dict)
             else:
                 sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                graph_text = generate_graph_inputs(sub_graph_dict, graph[corpus])
+                graph_text = generate_graph_inputs(args, sub_graph_dict, graph[corpus])
             node_num = len(graph_text)+1
             data_lst.append((corpus, pid, abstract, introduce, sub_graph_dict, graph_text, node_num, args))
         data_dict[corpus] = data_lst
