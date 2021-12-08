@@ -148,7 +148,7 @@ def generate_graph_structs(args, paper_id, graph_strut_dict):
 
     n_hop = args.n_hop
     max_neighbor_num = args.max_neighbor_num
-    k_nbrs = _k_hop_neighbor(paper_id, n_hop, max_neighbor_num)
+    k_nbrs = _k_hop_neighbor(paper_id, n_hop, max_neighbor_num, graph_strut_dict)
     for sub_g in k_nbrs:
         sub_graph_set += sub_g
 
@@ -164,6 +164,30 @@ def generate_graph_structs(args, paper_id, graph_strut_dict):
                 sub_graph_dict[c_nbr].append(centre_node)
     # in python 3.6, the first in subgraph dict is source paper
     return sub_graph_dict
+
+def _k_hop_neighbor(paper_id, n_hop, max_neighbor, graph_strut_dict):
+    sub_graph = [[] for _ in range(n_hop + 1)]
+    level = 0
+    visited = set()
+    q = deque()
+    q.append([paper_id, level])
+    curr_node_num = 0
+    while len(q) != 0:
+        paper_first = q.popleft()
+        paper_id_first, level_first = paper_first
+        if level_first > n_hop:
+            return sub_graph
+        sub_graph[level_first].append(paper_id_first)
+        curr_node_num += 1
+        if curr_node_num > max_neighbor:
+            return sub_graph
+        visited.add(paper_id_first)
+        for pid in graph_strut_dict[paper_id_first]["references"]:
+            if pid not in visited and pid in graph_strut_dict:
+                q.append([pid, level_first + 1])
+                visited.add(pid)
+
+    return sub_graph
 
 def generate_graph_inputs(graph_struct, graph_strut_dict):
     graph_inputs = [clean(graph_strut_dict[pid][args.graph_input_type]) for pid in graph_struct]
