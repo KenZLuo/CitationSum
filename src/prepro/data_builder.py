@@ -1,11 +1,13 @@
 import gc
 import glob
+from  tqdm import tqdm
 import hashlib
 import itertools
 import json
 import os
 import random
 import re
+import pandas as pd
 import dgl
 import subprocess
 from collections import Counter
@@ -140,12 +142,12 @@ def tokenize(args):
     print("Successfully finished tokenizing %s to %s.\n" % (stories_dir, tokenized_stories_dir))
 
 
-def generate_graph_structs(paper_id, graph_strut_dict):
+def generate_graph_structs(args, paper_id, graph_strut_dict):
     sub_graph_dict = {}
     sub_graph_set = []
 
-    n_hop = config.n_hop
-    max_neighbor_num = config.max_neighbor_num
+    n_hop = args.n_hop
+    max_neighbor_num = args.max_neighbor_num
     k_nbrs = _k_hop_neighbor(paper_id, n_hop, max_neighbor_num)
     for sub_g in k_nbrs:
         sub_graph_set += sub_g
@@ -174,14 +176,19 @@ def format_cite(args):
     root_data_dir = os.path.abspath(args.raw_path)
     dirs = ['train', 'val', 'test']
 
-    print("Preparing to tokenize %s to %s..." % (stories_dir, tokenized_stories_dir))
+    #print("Preparing to tokenize %s to %s..." % (stories_dir, tokenized_stories_dir))
 
     if args.setting == "transductive":
         graph_strut_dict = {}
         for dir in dirs:
             source_txt_file = os.path.join(root_data_dir, '{}.jsonl'.format(dir))
-            df = pd.read_json(path_or_buf=source_txt_file, lines=True)
-            for ins in df:
+            #df = pd.read_json(path_or_buf=source_txt_file, lines=True)
+            
+            with open(source_txt_file, 'r') as f:
+                json_main = list(f)
+            
+            for ins in json_main:
+                ins = json.loads(ins)
                 graph_strut_dict[ins["paper_id"]] = ins
     else:
         graph_train_dict = {}
@@ -192,43 +199,60 @@ def format_cite(args):
         val_path = os.path.join(root_data_dir, 'val.jsonl')
         train_path = os.path.join(root_data_dir, 'train.jsonl')
 
-        train_df = pd.read_json(path_or_buf=train_path, lines=True)
-        val_df = pd.read_json(path_or_buf=val_path, lines=True)
-        test_df = pd.read_json(path_or_buf=test_path, lines=True)
+        #train_df = pd.read_json(path_or_buf=train_path, lines=True)
+        #val_df = pd.read_json(path_or_buf=val_path, lines=True)
+        #test_df = pd.read_json(path_or_buf=test_path, lines=True)
 
-        for ins in train_df:
+        with open(train_path, 'r') as f:
+            train_json_main = list(f)
+
+        with open(val_path, 'r') as f:
+            val_json_main = list(f)
+        
+        with open(test_path, 'r') as f:
+            test_json_main = list(f)
+        
+        for ins in train_json_main:
+            ins = json.loads(ins)
             graph_train_dict[ins["paper_id"]] = ins
 
-        for ins in val_df:
+        for ins in val_json_main:
+            ins = json.loads(ins)
             graph_val_dict[ins["paper_id"]] = ins
 
-        for ins in test_df:
+        for ins in test_json_main:
+            ins = json.loads(ins)
             graph_test_dict[ins["paper_id"]] = ins
 
         graph = {'train': graph_train_dict, 'val': graph_val_dict, 'test': graph_test_dict}
 
     data_dict = {}
-    for dir in dirs:
+    for corpus in dirs:
         data_lst = []
-        source_txt_file = os.path.join(root_data_dir, '{}.jsonl'.format(dir))
-        df = pd.read_json(path_or_buf=source_txt_file, lines=True)
-        for i, row in tqdm(df.iterrows(), total=df.shape[0]):
+        source_txt_file = os.path.join(root_data_dir, '{}.jsonl'.format(corpus))
+        #df = pd.read_json(path_or_buf=source_txt_file, lines=True)
+        
+        with open(source_txt_file, 'r') as f:
+            json_main = list(f)
+        
+        for row in tqdm(json_main):
+            row = json.loads(row)
             pid = row['paper_id']
             abstract = [word_tokenize(t) for t in sent_tokenize(clean(row['abstract']))]
             introduce = [word_tokenize(t) for t in sent_tokenize(clean(row['introduction']))]
 
             if args.setting == "transductive":
-                sub_graph_dict = generate_graph_structs(pid, graph_strut_dict)
+                sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
                 graph_text = generate_graph_inputs(sub_graph_dict, graph_strut_dict)
             else:
-                sub_graph_dict = generate_graph_structs(pid, graph[dir])
-                graph_text = generate_graph_inputs(sub_graph_dict, graph[dir])
+                sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
+                graph_text = generate_graph_inputs(sub_graph_dict, graph[corpus])
             node_num = len(graph_text)+1
-            data_lst.append((dir, pid, abstract, introduce, sub_graph_dict, graph_text, node_num, args))
-        data_dict[dir] = data_lst
+            data_lst.append((corpus, pid, abstract, introduce, sub_graph_dict, graph_text, node_num, args))
+        data_dict[corpus] = data_lst
 
-    for dir in dirs:
-        a_lst = data_dict[dir]
+    for d in dirs:
+        a_lst = data_dict[d]
         pool = Pool(args.n_cpus)
         dataset = []
         shard_count = 0
