@@ -189,6 +189,25 @@ def _k_hop_neighbor(paper_id, n_hop, max_neighbor, graph_strut_dict):
 
     return sub_graph
 
+
+def generate_dgl_graph(paper_id, graph_struct, nodes_num):
+    g = dgl.DGLGraph()
+    assert len(graph_struct) == nodes_num
+
+    g.add_nodes(len(graph_struct))
+    pid2idx = {}
+    for index, key_node in enumerate(graph_struct):
+        pid2idx[key_node] = index
+    assert pid2idx[paper_id] == 0
+
+    for index, key_node in enumerate(graph_struct):
+        neighbor = [pid2idx[node] for node in graph_struct[key_node]]
+        # add self loop
+        neighbor.append(index)
+        key_nodes = [index] * len(neighbor)
+        g.add_edges(key_nodes, neighbor)
+    return g
+
 def generate_graph_inputs(args, graph_struct, graph_strut_dict):
     graph_inputs = [clean(graph_strut_dict[pid][args.graph_input_type]) for pid in graph_struct]
     graph_inputs_tokenize = []
