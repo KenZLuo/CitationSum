@@ -8,6 +8,7 @@ import os
 import random
 import re
 import pandas as pd
+import time
 import dgl
 import subprocess
 from collections import Counter, deque
@@ -29,6 +30,7 @@ import xml.etree.ElementTree as ET
 nyt_remove_words = ["photo", "graph", "chart", "map", "table", "drawing"]
 
 
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
 def recover_from_corenlp(s):
     s = re.sub(r' \'{\w}', '\'\g<1>', s)
     s = re.sub(r'\'\' {\w}', '\'\'\g<1>', s)
@@ -278,7 +280,7 @@ def format_cite(args):
         with open(source_txt_file, 'r') as f:
             json_main = list(f)
         
-        for row in tqdm(json_main[:200]):
+        for row in tqdm(json_main):
             row = json.loads(row)
             pid = row['paper_id']
             abstract = [word_tokenize(t) for t in sent_tokenize(clean(row['abstract']))]
@@ -303,14 +305,18 @@ def format_cite(args):
             with tqdm(total=args.shard_size) as spbar:
                 for i, data in enumerate(pool.imap(_format_cite, a_lst)):
                     if data:
-                        src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt, graph_subtoken_idxs, graph = b_data
+                        src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt, graph_subtoken_idxs, graph = data
+                        
+                        #print("graph_idxs:", graph_subtoken_idxs)
+                        #print("graph:", graph)
+                        #print("len:", len(graph_subtoken_idxs))
                         b_data_dict = {"src": src_subtoken_idxs, "tgt": tgt_subtoken_idxs,
                                        "src_sent_labels": sent_labels, "segs": segments_ids, 'clss': cls_ids,
                                        'src_txt': src_txt, "tgt_txt": tgt_txt, 'graph_src':graph_subtoken_idxs, "graph": graph}
                         dataset.append(b_data_dict)
                     spbar.update()
                     if (len(dataset) > args.shard_size):
-                        fpath = "{:s}/{:s}.{:d}.pt".format(args.save_path, corpus_type, shard_count)
+                        fpath = "{:s}/{:s}.{:d}.pt".format(args.save_path, d, shard_count)
                         torch.save(dataset,fpath)
                         dataset = []
                         shard_count += 1
@@ -322,11 +328,11 @@ def format_cite(args):
             pool.close()
             pool.join()
             if len(dataset) > 0:
-                fpath = "{:s}/{:s}.{:d}.pt".format(args.save_path, corpus_type, shard_count)
+                fpath = "{:s}/{:s}.{:d}.pt".format(args.save_path, d, shard_count)
                 torch.save(dataset,fpath)
                 shard_count += 1
-        end = time.time()
-        print('... Ending (4), time elapsed {}'.format(end - start))
+        #end = time.time()
+        #print('... Ending (4), time elapsed {}'.format(end - start))
 
 def _format_cite(params):
     corpus_type, pid, abstract, introduce, sub_graph_dict, graph_text, node_num, args = params
@@ -475,7 +481,7 @@ class BertData():
 class BertCiteData():
     def __init__(self, args):
         self.args = args
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+        #self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
 
         self.sep_token = '[SEP]'
         self.cls_token = '[CLS]'
@@ -483,9 +489,9 @@ class BertCiteData():
         self.tgt_bos = '[unused0]'
         self.tgt_eos = '[unused1]'
         self.tgt_sent_split = '[unused2]'
-        self.sep_vid = self.tokenizer.vocab[self.sep_token]
-        self.cls_vid = self.tokenizer.vocab[self.cls_token]
-        self.pad_vid = self.tokenizer.vocab[self.pad_token]
+        self.sep_vid = tokenizer.vocab[self.sep_token]
+        self.cls_vid = tokenizer.vocab[self.cls_token]
+        self.pad_vid = tokenizer.vocab[self.pad_token]
 
     def preprocess(self, src, tgt, sent_labels, graph_src, graph, use_bert_basic_tokenizer=False, is_test=False):
 
@@ -516,14 +522,14 @@ class BertCiteData():
         for each_graph_src in graph_src:
             each_src = [' '.join(sent) for sent in each_graph_src]
             each_text = ' {} {} '.format(self.sep_token, self.cls_token).join(each_src)
-            each_graph_src_subtokens = self.tokenizer.tokenize(each_text)
+            each_graph_src_subtokens = tokenizer.tokenize(each_text)
             each_graph_src_subtokens = [self.cls_token] + each_graph_src_subtokens + [self.sep_token]
-            each_graph_subtoken_idxs = self.tokenizer.convert_tokens_to_ids(each_graph_src_subtokens)
+            each_graph_subtoken_idxs = tokenizer.convert_tokens_to_ids(each_graph_src_subtokens)
             graph_subtoken_idxs.append(each_graph_subtoken_idxs)
 
-        src_subtokens = self.tokenizer.tokenize(text)
+        src_subtokens = tokenizer.tokenize(text)
         src_subtokens = [self.cls_token] + src_subtokens + [self.sep_token]
-        src_subtoken_idxs = self.tokenizer.convert_tokens_to_ids(src_subtokens)
+        src_subtoken_idxs = tokenizer.convert_tokens_to_ids(src_subtokens)
         _segs = [-1] + [i for i, t in enumerate(src_subtoken_idxs) if t == self.sep_vid]
         segs = [_segs[i] - _segs[i - 1] for i in range(1, len(_segs))]
         segments_ids = []
@@ -536,12 +542,12 @@ class BertCiteData():
         sent_labels = sent_labels[:len(cls_ids)]
 
         tgt_subtokens_str = '[unused0] ' + ' [unused2] '.join(
-            [' '.join(self.tokenizer.tokenize(' '.join(tt), use_bert_basic_tokenizer=use_bert_basic_tokenizer)) for tt in tgt]) + ' [unused1]'
+            [' '.join(tokenizer.tokenize(' '.join(tt), use_bert_basic_tokenizer=use_bert_basic_tokenizer)) for tt in tgt]) + ' [unused1]'
         tgt_subtoken = tgt_subtokens_str.split()[:self.args.max_tgt_ntokens]
         if ((not is_test) and len(tgt_subtoken) < self.args.min_tgt_ntokens):
             return None
 
-        tgt_subtoken_idxs = self.tokenizer.convert_tokens_to_ids(tgt_subtoken)
+        tgt_subtoken_idxs = tokenizer.convert_tokens_to_ids(tgt_subtoken)
 
         tgt_txt = '<q>'.join([' '.join(tt) for tt in tgt])
         src_txt = [original_src_txt[i] for i in idxs]
