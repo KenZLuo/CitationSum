@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 from pytorch_transformers import BertModel, BertConfig
 from torch.nn.init import xavier_uniform_
-
+from dgl.nn.pytorch import GATConv
+from dgl.nn.pytorch import GraphConv
 from models.decoder import TransformerDecoder
 from models.encoder import Classifier, ExtTransformerEncoder
 from models.optimizers import Optimizer
@@ -163,6 +164,112 @@ class Bert(nn.Module):
 
         return encoder_outputs, h_cnode_batch
 
+class GNNEncoder(nn.Module):
+    def __init__(self, args):
+        super(GNNEncoder, self).__init__()
+        heads = ([args.num_heads] * args.num_layers) + [args.num_out_heads]
+        if args.GNN == "GAT":
+            self.gnn = GAT(num_layers=args.num_layers, in_dim=args.hidden_dim , heads=heads,
+                           num_hidden=args.hidden_dim, residual=args.residual)
+        elif args.GNN == "GCN":
+            self.gnn = GCN(in_feats=args.hidden_dim, n_hidden=args.hidden_dim ,
+                           n_layers=args.num_layers, dropout=args.gnn_drop)
+        else:
+            raise Exception("GNN not supported ")
+
+    def forward(self, graphs, node_feats, node_idx, nodes_num_batch):
+        # if graphs length = 1 there will be errors in dgl
+        if len(graphs) == 1:
+            graphs.append(dgl.DGLGraph())
+
+        g = dgl.batch(graphs)
+        if g.number_of_nodes() != len(node_feats):
+            logger.error("error: number of nodes in dgl graph do not equal nodes in input graph !!!")
+            logger.error(
+                f"number of nodes this batch:{sum(nodes_num_batch).item()}, number of num in dgl graph {g.number_of_nodes()}")
+            assert g.number_of_nodes() == len(node_feats)
+
+        gnn_feat = self.gnn(g, node_feats)
+        b = len(nodes_num_batch)
+        n = max(nodes_num_batch)
+        h = gnn_feat.shape[1]
+        node_features = torch.zeros([b, n, h], device=gnn_feat.device)
+        # 还原成 B x max_nodes_num x hidden
+        for i in range(len(node_idx) - 1):
+            curr_idx = node_idx[i]
+            next_idx = node_idx[i + 1]
+            mask = torch.arange(curr_idx, next_idx, device=gnn_feat.device)
+            output_feat = torch.index_select(gnn_feat, 0, mask)
+            if output_feat.shape[0] < n:
+                pad_num = n - output_feat.shape[0]
+                extra_zeros = torch.zeros(pad_num, h, device=gnn_feat.device)
+                output_feat = torch.cat([output_feat, extra_zeros], 0)
+            node_features[i] = output_feat
+
+        return node_features
+
+class GAT(nn.Module):
+    def __init__(self,
+                 num_layers,
+                 in_dim,
+                 heads,
+                 num_hidden=256,
+                 activation=F.elu,
+                 feat_drop=0.1,
+                 attn_drop=0.0,
+                 negative_slope=0.2,
+                 residual=True,
+                 out_dim=None):
+        super(GAT, self).__init__()
+        self.num_layers = num_layers
+        self.gat_layers = nn.ModuleList()
+        self.activation = activation
+        # input projection (no residual)
+        self.gat_layers.append(GATConv(
+            in_dim, num_hidden, heads[0],
+            feat_drop, attn_drop, negative_slope, False, self.activation))
+        # hidden layers
+        for l in range(1, num_layers):
+            # due to multi-head, the in_dim = num_hidden * num_heads
+            self.gat_layers.append(GATConv(
+                num_hidden * heads[l - 1], num_hidden, heads[l],
+                feat_drop, attn_drop, negative_slope, residual, self.activation))
+
+    def forward(self, g, inputs):
+        h = inputs
+        for l in range(self.num_layers - 1):
+            h = self.gat_layers[l](g, h).flatten(1)
+        # output layer mean of the attention head
+        output = self.gat_layers[-1](g, h).mean(1)
+        return output
+
+
+class GCN(nn.Module):
+    def __init__(self,
+                 in_feats,
+                 n_hidden,
+                 n_layers,
+                 activation=F.relu,
+                 dropout=0.1,
+                 out_dim=None):
+        super(GCN, self).__init__()
+        self.layers = nn.ModuleList()
+        # input layer
+        self.layers.append(GraphConv(in_feats, n_hidden, activation=activation))
+        # hidden layers
+        for i in range(n_layers - 1):
+            self.layers.append(GraphConv(n_hidden, n_hidden, activation=activation))
+
+        self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, g, features):
+        h = features
+        for i, layer in enumerate(self.layers):
+            if i != 0:
+                h = self.dropout(h)
+            h = layer(g, h) + h  # residual
+        return h
+
 
 class ExtSummarizer(nn.Module):
     def __init__(self, args, device, checkpoint):
@@ -213,7 +320,8 @@ class AbsSummarizer(nn.Module):
         self.args = args
         self.device = device
         self.bert = Bert(args.large, args.temp_dir, args.finetune_bert)
-        self.join = nn.Linear(2 * self.bert.model.config.hidden_size, 2 * self.bert.model.config.hidden_size)
+        self.gnnEncoder = GNNEncoder(args)
+        self.join = nn.Linear(2 * self.bert.model.config.hidden_size, self.bert.model.config.hidden_size)
         if bert_from_extractive is not None:
             self.bert.model.load_state_dict(
                 dict([(n[11:], p) for n, p in bert_from_extractive.items() if n.startswith('bert.model')]), strict=True)
@@ -304,9 +412,20 @@ class AbsSummarizer(nn.Module):
             node_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
             node_enc_outputs, node_hidden = self.bert(node_batch.to(src.device), node_enc_mask.to(src.device))
             node_features.append(self.pooling(node_hidden, node_enc_outputs))
-
         node_features = torch.cat(node_features, 1)
-        neighbor_feat = self.gnnEncoder(graphs_sample, node_features, node_idx, nodes_num)
+
+        node_feature_res = []
+        node_feature_idx = [0]
+        for idx, node_feature in enumerate(node_features):
+            n_num = node_num[idx]
+            mask = torch.arange(n_num)
+            node_feature_idx.append(node_feature_idx[-1] + len(mask))
+            node_feature_res.append(torch.index_select(node_feature, 0, torch.tensor(mask, device=node_feature.device)))
+        node_feature_res = torch.cat(node_feature_res, 0)
+        assert len(node_feature_res) == sum(nodes_num).item()
+
+        neighbor_feat = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
+        print(neighbor_feat.shape)
 
         dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
         decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)

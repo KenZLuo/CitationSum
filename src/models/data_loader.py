@@ -16,14 +16,8 @@ class Batch(object):
         rtn_data = [d + [pad_id] * (width - len(d)) for d in data]
         return rtn_data
 
-    def _pad_graph_inputs(self, graph_inputs, pad_id):
+    def _pad_graph_inputs(self, graph_inputs, pad_id, max_len):
         #print(max_len)
-        len_list = []
-        for graph in graph_inputs:
-            for each_input in graph:
-                len_list.append(len(each_input))
-        #print(graph_inputs)
-        max_len = max(len_list)
         pad_graph_inputs = []
         graph_input_len = []
         node_num = []
@@ -35,7 +29,7 @@ class Batch(object):
 
         return pad_graph_inputs, graph_input_len, torch.tensor(node_num)
 
-    def __init__(self, data=None, device=None, is_test=False):
+    def __init__(self, args, data=None, device=None, is_test=False):
         """Create a Batch from a list of examples."""
         if data is not None:
             self.batch_size = len(data)
@@ -49,7 +43,7 @@ class Batch(object):
 
             src = torch.tensor(self._pad(pre_src, 0))
             tgt = torch.tensor(self._pad(pre_tgt, 0))
-            graph_src, graph_src_len, node_num = self._pad_graph_inputs(pre_graph_src, 0)
+            graph_src, graph_src_len, node_num = self._pad_graph_inputs(pre_graph_src, 0, args.max_graph_pos)
 
            # print(len(graph_src))
             segs = torch.tensor(self._pad(pre_segs, 0))
@@ -314,7 +308,7 @@ class DataIterator(object):
                     continue
                 self.iterations += 1
                 self._iterations_this_epoch += 1
-                batch = Batch(minibatch, self.device, self.is_test)
+                batch = Batch(self.args, minibatch, self.device, self.is_test)
 
                 yield batch
             return

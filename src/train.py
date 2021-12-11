@@ -76,8 +76,11 @@ if __name__ == '__main__':
     parser.add_argument("-min_length", default=15, type=int)
     parser.add_argument("-max_length", default=150, type=int)
     parser.add_argument("-max_tgt_len", default=140, type=int)
-
-
+    parser.add_argument("-num_heads", default=4, type=int)
+    parser.add_argument("-num_layers", default=2, type=int)
+    parser.add_argument("-num_out_heads", default=4, type=int)
+    parser.add_argument("-hidden_dim", default=768, type=int)
+    parser.add_argument("-residual", default=True, type=str2bool)
 
     parser.add_argument("-param_init", default=0, type=float)
     parser.add_argument("-param_init_glorot", type=str2bool, nargs='?',const=True,default=True)
