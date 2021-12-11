@@ -322,7 +322,7 @@ class AbsSummarizer(nn.Module):
         self.device = device
         self.bert = Bert(args.large, args.temp_dir, args.finetune_bert)
         self.gnnEncoder = GNNEncoder(args)
-        self.join = nn.Linear(2 * self.bert.model.config.hidden_size, self.bert.model.config.hidden_size)
+        self.join = nn.Linear(2 * self.bert.model.config.hidden_size, self.args.hidden_dim)
         if bert_from_extractive is not None:
             self.bert.model.load_state_dict(
                 dict([(n[11:], p) for n, p in bert_from_extractive.items() if n.startswith('bert.model')]), strict=True)
@@ -394,7 +394,7 @@ class AbsSummarizer(nn.Module):
 
         return node_feature.unsqueeze(1)
 
-    def forward(self, src, tgt, segs, clss, mask_src, mask_tgt, mask_cls, graph_src, graph, graph_len, node_num):
+    def forward(self, src, tgt, mask_src, graph_src, graph, graph_len, node_num):
         encoder_outputs, h_cnode_batch = self.bert(src, mask_src)
 
         node_features = [self.pooling(h_cnode_batch, encoder_outputs)]

@@ -214,17 +214,17 @@ class Trainer(object):
 
             src = batch.src
             tgt = batch.tgt
-            segs = batch.segs
-            clss = batch.clss
+            #segs = batch.segs
+            #clss = batch.clss
             mask_src = batch.mask_src
             mask_tgt = batch.mask_tgt
-            mask_cls = batch.mask_cls
+            #mask_cls = batch.mask_cls
             graph_src = batch.graph_src
             graph = batch.graph
             graph_len = batch.graph_src_len
             node_num = batch.node_num
             #print(mask_src)
-            outputs, scores = self.model(src, tgt,segs, clss, mask_src, mask_tgt, mask_cls, graph_src, graph, graph_len, node_num)
+            outputs, scores = self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
             batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization)
 
             batch_stats.n_docs = int(src.size(0))
