@@ -1,5 +1,6 @@
 import copy
-
+import dgl
+import torch.nn.functional as F
 import torch
 import torch.nn as nn
 from pytorch_transformers import BertModel, BertConfig
@@ -188,7 +189,7 @@ class GNNEncoder(nn.Module):
             logger.error(
                 f"number of nodes this batch:{sum(nodes_num_batch).item()}, number of num in dgl graph {g.number_of_nodes()}")
             assert g.number_of_nodes() == len(node_feats)
-
+        g = g.to(node_feats.device)
         gnn_feat = self.gnn(g, node_feats)
         b = len(nodes_num_batch)
         n = max(nodes_num_batch)
@@ -422,10 +423,10 @@ class AbsSummarizer(nn.Module):
             node_feature_idx.append(node_feature_idx[-1] + len(mask))
             node_feature_res.append(torch.index_select(node_feature, 0, torch.tensor(mask, device=node_feature.device)))
         node_feature_res = torch.cat(node_feature_res, 0)
-        assert len(node_feature_res) == sum(nodes_num).item()
+        assert len(node_feature_res) == sum(node_num).item()
 
         neighbor_feat = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
-        print(neighbor_feat.shape)
+        #print(neighbor_feat.shape)
 
         dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
         decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)
