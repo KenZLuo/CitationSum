@@ -223,7 +223,7 @@ class Trainer(object):
             graph = batch.graph
             graph_len = batch.graph_src_len
             node_num = batch.node_num
-
+            #print(mask_src)
             outputs, scores = self.model(src, tgt,segs, clss, mask_src, mask_tgt, mask_cls, graph_src, graph, graph_len, node_num)
             batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization)
 

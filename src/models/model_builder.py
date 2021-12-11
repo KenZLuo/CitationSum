@@ -124,37 +124,41 @@ class Bert(nn.Module):
 
     def forward(self, x, segs, mask):
         if(self.finetune):
-            if enc_input.shape[1] > 512:
+            if x.shape[1] > 512:
                 encoder_outputs = []
                 h_cnode_batch = []
-                n = enc_input.shape[1] // 512
+                n = x.shape[1] // 512
                 for w in range(n+1):
-                    output = self.bert.model(input_ids=enc_input[: , w*512: w*512 + 512],
-                            attention_mask= enc_mask[: , w*512: w*512 + 512])
-                    encoder_outputs.append(output.last_hidden_state)
-                    h_cnode_batch.append(output.pooler_output)
+                    last_hidden, pool_out = self.model(input_ids=x[: , w*512: w*512 + 512],
+                            attention_mask= mask[: , w*512: w*512 + 512])
+                    encoder_outputs.append(last_hidden)
+                    h_cnode_batch.append(pool_output)
                     encoder_outputs = torch.cat(encoder_outputs, dim=1)
                     h_cnode_batch = torch.max(torch.stack(h_cnode_batch, dim=0), dim=0)[0].squeeze(0)
             else:
-                outputs = self.model(x, segs, attention_mask=mask)
-                encoder_outputs = outputs.last_hidden_state
-                h_cnode_batch = outputs.pooler_output
+                #print(mask)
+                encoder_outputs, h_cnode_batch = self.model(input_ids=x, token_type_ids=segs, attention_mask=mask)
+                #encoder_outputs = outputs.last_hidden_state
+                #h_cnode_batch = outputs.pooler_output
         else:
             self.eval()
             with torch.no_grad():
-                if enc_input.shape[1] > 512:
+                if x.shape[1] > 512:
                     encoder_outputs = []
                     h_cnode_batch = []
-                    n = enc_input.shape[1] // 512
+                    n = x.shape[1] // 512
                     for w in range(n+1):
-                        output = self.bert.model(input_ids=enc_input[: , w*512: w*512 + 512],
-                                attention_mask= enc_mask[: , w*512: w*512 + 512])
-                        encoder_outputs.append(output.last_hidden_state)
-                        h_cnode_batch.append(output.pooler_output)
+                        last_hidden, pool_output = self.model(input_ids=x[: , w*512: w*512 + 512],
+                                attention_mask=mask[: , w*512: w*512 + 512])
+                        encoder_outputs.append(last_hidden)
+                        h_cnode_batch.append(pool_output)
+                        encoder_outputs = torch.cat(encoder_outputs, dim=1)
+                        h_cnode_batch = torch.max(torch.stack(h_cnode_batch, dim=0), dim=0)[0].squeeze(0)
+
                 else:
-                    outputs = self.model(x, segs, attention_mask=mask)
-                    encoder_outputs = outputs.last_hidden_state
-                    h_cnode_batch = outputs.pooler_output
+                    encoder_outputs, h_cnode_batch = self.model(x, segs, attention_mask=mask)
+                    #encoder_outputs = outputs.last_hidden_state
+                    #h_cnode_batch = outputs.pooler_output
 
         return encoder_outputs, h_cnode_batch
 
@@ -208,7 +212,7 @@ class AbsSummarizer(nn.Module):
         self.args = args
         self.device = device
         self.bert = Bert(args.large, args.temp_dir, args.finetune_bert)
-
+        self.join = nn.Linear(2 * self.bert.model.config.hidden_size, 2 * self.bert.model.config.hidden_size)
         if bert_from_extractive is not None:
             self.bert.model.load_state_dict(
                 dict([(n[11:], p) for n, p in bert_from_extractive.items() if n.startswith('bert.model')]), strict=True)
@@ -275,6 +279,7 @@ class AbsSummarizer(nn.Module):
             mean_feat = torch.mean(last_hidden_state, dim=1)
             max_feat = torch.max(last_hidden_state, dim=1)[0]
             feat = torch.cat([mean_feat, max_feat], 1)
+            #print (feat.shape, self.join)
             node_feature = self.join(feat)
 
         return node_feature.unsqueeze(1)
@@ -283,9 +288,11 @@ class AbsSummarizer(nn.Module):
         encoder_outputs, h_cnode_batch = self.bert(src, segs, mask_src)
 
         node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
-        neighbor_node_num = max(nodes_num - 1)
+        neighbor_node_num = max(node_num - 1)
 
         for idx in range(neighbor_node_num):
+            print(idx)
+            print(graph_src.shape)
             node_batch = graph_src[:, idx, :]
             len_batch =graph_len[:, idx].clone()
             # there may be some error if  seq_len = 0 in this batch

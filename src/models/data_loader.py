@@ -17,7 +17,13 @@ class Batch(object):
         return rtn_data
 
     def _pad_graph_inputs(self, graph_inputs, pad_id):
-        max_len = len(max(graph_inputs, key=len))
+        #print(max_len)
+        len_list = []
+        for graph in graph_inputs:
+            for each_input in graph:
+                len_list.append(len(each_input))
+        #print(graph_inputs)
+        max_len = max(len_list)
         pad_graph_inputs = []
         graph_input_len = []
         node_num = []
@@ -27,7 +33,7 @@ class Batch(object):
             graph_input_len.append([len(g) for g in graph_input])
             node_num.append(len(graph_input)+1)
 
-        return pad_graph_inputs, graph_input_len, torch.tensor(node_num)
+        return torch.tensor(pad_graph_inputs), graph_input_len, torch.tensor(node_num)
 
     def __init__(self, data=None, device=None, is_test=False):
         """Create a Batch from a list of examples."""
@@ -45,10 +51,11 @@ class Batch(object):
             tgt = torch.tensor(self._pad(pre_tgt, 0))
             graph_src, graph_src_len, node_num = self._pad_graph_inputs(pre_graph_src, 0)
 
+           # print(len(graph_src))
             segs = torch.tensor(self._pad(pre_segs, 0))
             mask_src = ~(src == 0)
             mask_tgt = ~(tgt == 0)
-
+            #print(mask_src)
 
             clss = torch.tensor(self._pad(pre_clss, -1))
             src_sent_labels = torch.tensor(self._pad(pre_src_sent_labels, 0))
@@ -63,8 +70,9 @@ class Batch(object):
             setattr(self, 'tgt', tgt.to(device))
             setattr(self, 'segs', segs.to(device))
             setattr(self, 'mask_src', mask_src.to(device))
-            setattr(self, 'graph_src', mask_tgt.to(device))
-            setattr(self, 'mask_src', graph_src)
+            #setattr(self, 'graph_src', mask_tgt.to(device))
+            setattr(self, 'graph_src', graph_src)
+            setattr(self, 'mask_tgt', mask_tgt.to(device))
             setattr(self, 'graph_src_len', graph_src_len)
             setattr(self, 'graph', pre_graph)
             setattr(self, 'node_num', node_num.to(device))
@@ -97,9 +105,11 @@ def load_dataset(args, corpus_type, shuffle):
         logger.info('Loading %s dataset from %s, number of examples: %d' %
                     (corpus_type, pt_file, len(dataset)))
         return dataset
-
+    #print(corpus_type)
+    #print(args.bert_data_path + corpus_type + '.0.pt')
     # Sort the glob output by file name (by increasing indexes).
-    pts = sorted(glob.glob(args.bert_data_path + '.' + corpus_type + '.[0-9]*.pt'))
+    pts = sorted(glob.glob(args.bert_data_path + corpus_type + '.[0-9]*.pt'))
+    
     if pts:
         if (shuffle):
             random.shuffle(pts)
@@ -224,6 +234,8 @@ class DataIterator(object):
         src = src[:-1][:self.args.max_pos - 1] + end_id
 
         segs = segs[:self.args.max_pos]
+        #print(len(graph_src))
+        #print(graph_src)
         graph_src = [s[:-1][:self.args.max_graph_pos - 1] + end_id for s in graph_src]
         max_sent_id = bisect.bisect_left(clss, self.args.max_pos)
         src_sent_labels = src_sent_labels[:max_sent_id]
@@ -240,7 +252,7 @@ class DataIterator(object):
     def batch_buffer(self, data, batch_size):
         minibatch, size_so_far = [], 0
         for ex in data:
-            if(len(ex['src'])==0):
+            if(len(ex['src'])==0) or (len(ex['graph_src'])==0):
                 continue
             ex = self.preprocess(ex, self.is_test)
             if(ex is None):
