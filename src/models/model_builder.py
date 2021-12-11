@@ -8,6 +8,7 @@ from torch.nn.init import xavier_uniform_
 from models.decoder import TransformerDecoder
 from models.encoder import Classifier, ExtTransformerEncoder
 from models.optimizers import Optimizer
+from fastNLP.core import seq_len_to_mask
 
 def build_optim(args, model, checkpoint):
     """ Build optimizer """
@@ -122,7 +123,7 @@ class Bert(nn.Module):
 
         self.finetune = finetune
 
-    def forward(self, x, segs, mask):
+    def forward(self, x, mask):
         if(self.finetune):
             if x.shape[1] > 512:
                 encoder_outputs = []
@@ -137,7 +138,7 @@ class Bert(nn.Module):
                     h_cnode_batch = torch.max(torch.stack(h_cnode_batch, dim=0), dim=0)[0].squeeze(0)
             else:
                 #print(mask)
-                encoder_outputs, h_cnode_batch = self.model(input_ids=x, token_type_ids=segs, attention_mask=mask)
+                encoder_outputs, h_cnode_batch = self.model(input_ids=x,  attention_mask=mask)
                 #encoder_outputs = outputs.last_hidden_state
                 #h_cnode_batch = outputs.pooler_output
         else:
@@ -156,7 +157,7 @@ class Bert(nn.Module):
                         h_cnode_batch = torch.max(torch.stack(h_cnode_batch, dim=0), dim=0)[0].squeeze(0)
 
                 else:
-                    encoder_outputs, h_cnode_batch = self.model(x, segs, attention_mask=mask)
+                    encoder_outputs, h_cnode_batch = self.model(x, attention_mask=mask)
                     #encoder_outputs = outputs.last_hidden_state
                     #h_cnode_batch = outputs.pooler_output
 
@@ -285,21 +286,23 @@ class AbsSummarizer(nn.Module):
         return node_feature.unsqueeze(1)
 
     def forward(self, src, tgt, segs, clss, mask_src, mask_tgt, mask_cls, graph_src, graph, graph_len, node_num):
-        encoder_outputs, h_cnode_batch = self.bert(src, segs, mask_src)
+        encoder_outputs, h_cnode_batch = self.bert(src, mask_src)
 
         node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
         neighbor_node_num = max(node_num - 1)
 
         for idx in range(neighbor_node_num):
-            print(idx)
-            print(graph_src.shape)
+            #print(idx)
+            #print(graph_src)
+            #print(graph_len)
+            graph_src = torch.tensor(graph_src)
             node_batch = graph_src[:, idx, :]
-            len_batch =graph_len[:, idx].clone()
+            len_batch =torch.tensor(graph_len)[:, idx].clone()
             # there may be some error if  seq_len = 0 in this batch
             for i in range(len(len_batch)):
                 len_batch[i] += (len_batch[i] == 0)
             node_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
-            node_enc_outputs, node_hidden = self.bert(node_batch, node_enc_mask)
+            node_enc_outputs, node_hidden = self.bert(node_batch.to(src.device), node_enc_mask.to(src.device))
             node_features.append(self.pooling(node_hidden, node_enc_outputs))
 
         node_features = torch.cat(node_features, 1)

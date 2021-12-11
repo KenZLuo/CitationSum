@@ -29,11 +29,11 @@ class Batch(object):
         node_num = []
         for graph_input in graph_inputs:
             rtn_data = [g + [pad_id] * (max_len - len(g)) for g in graph_input]
-            pad_graph_inputs.append(torch.tensor(rtn_data))
+            pad_graph_inputs.append(rtn_data)
             graph_input_len.append([len(g) for g in graph_input])
             node_num.append(len(graph_input)+1)
 
-        return torch.tensor(pad_graph_inputs), graph_input_len, torch.tensor(node_num)
+        return pad_graph_inputs, graph_input_len, torch.tensor(node_num)
 
     def __init__(self, data=None, device=None, is_test=False):
         """Create a Batch from a list of examples."""
