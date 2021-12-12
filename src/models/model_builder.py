@@ -240,7 +240,8 @@ class GAT(nn.Module):
         h = inputs
         for l in range(self.num_layers - 1):
             h = self.gat_layers[l](g, h).flatten(1)
-        # output layer mean of the attention head
+        # output layer mean of the attention 
+        #print(self.gat_layers)
         output = self.gat_layers[-1](g, h).mean(1)
         return output
 
@@ -397,9 +398,10 @@ class AbsSummarizer(nn.Module):
     def forward(self, src, tgt, mask_src, graph_src, graph, graph_len, node_num):
         encoder_outputs, h_cnode_batch = self.bert(src, mask_src)
 
+        #print("encoder:", encoder_outputs.shape)
         node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
+        #node_features = [hidden_outputs]
         neighbor_node_num = max(node_num - 1)
-
         for idx in range(neighbor_node_num):
             #print(idx)
             #print(graph_src)
@@ -425,6 +427,7 @@ class AbsSummarizer(nn.Module):
         node_feature_res = torch.cat(node_feature_res, 0)
         assert len(node_feature_res) == sum(node_num).item()
 
+    
         neighbor_feat = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
         #print(neighbor_feat.shape)
 

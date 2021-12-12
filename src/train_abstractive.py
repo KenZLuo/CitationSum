@@ -12,7 +12,7 @@ import signal
 import time
 
 import torch
-from pytorch_transformers import BertTokenizer
+from transformers import BertTokenizer
 
 import distributed
 from models import data_loader, model_builder
@@ -182,7 +182,7 @@ def validate(args, device_id, pt, step):
     model = AbsSummarizer(args, device, checkpoint)
     model.eval()
 
-    valid_iter = data_loader.Dataloader(args, load_dataset(args, 'valid', shuffle=False),
+    valid_iter = data_loader.Dataloader(args, load_dataset(args, 'val', shuffle=False),
                                         args.batch_size, device,
                                         shuffle=False, is_test=False)
 

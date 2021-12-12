@@ -59,7 +59,7 @@ if __name__ == '__main__':
     parser.add_argument('-max_src_ntokens_per_sent', default=200, type=int)
     parser.add_argument('-min_tgt_ntokens', default=5, type=int)
     parser.add_argument('-max_tgt_ntokens', default=500, type=int)
-    parser.add_argument('-max_neighbor_num', default=64, type=int)
+    parser.add_argument('-max_neighbor_num', default=32, type=int)
     parser.add_argument('-min_neighbor_num', default=0, type=int)
     parser.add_argument('-n_hop', default=1, type=int)
     
