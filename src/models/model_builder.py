@@ -402,10 +402,13 @@ class AbsSummarizer(nn.Module):
         node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
         #node_features = [hidden_outputs]
         neighbor_node_num = max(node_num - 1)
+        #print(neighbor_node_num)
         for idx in range(neighbor_node_num):
             #print(idx)
             #print(graph_src)
             #print(graph_len)
+           # print(len(graph_src))
+            #print(graph_src)
             graph_src = torch.tensor(graph_src)
             node_batch = graph_src[:, idx, :]
             len_batch =torch.tensor(graph_len)[:, idx].clone()
