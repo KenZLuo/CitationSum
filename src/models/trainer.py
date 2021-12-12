@@ -189,13 +189,17 @@ class Trainer(object):
             for batch in valid_iter:
                 src = batch.src
                 tgt = batch.tgt
-                segs = batch.segs
-                clss = batch.clss
+                # segs = batch.segs
+                # clss = batch.clss
                 mask_src = batch.mask_src
                 mask_tgt = batch.mask_tgt
-                mask_cls = batch.mask_cls
-
-                outputs, _ = self.model(src, tgt, segs, clss, mask_src, mask_tgt, mask_cls)
+                # mask_cls = batch.mask_cls
+                graph_src = batch.graph_src
+                graph = batch.graph
+                graph_len = batch.graph_src_len
+                node_num = batch.node_num
+                # print(mask_src)
+                outputs, _ = self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
 
                 batch_stats = self.loss.monolithic_compute_loss(batch, outputs)
                 stats.update(batch_stats)
