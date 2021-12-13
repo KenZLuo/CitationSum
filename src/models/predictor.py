@@ -232,7 +232,7 @@ class Translator(object):
         segs = batch.segs
         mask_src = batch.mask_src
 
-        src_features = self.model.bert(src, mask_src)
+        src_features,_ = self.model.bert(src, mask_src)
         dec_states = self.model.decoder.init_decoder_state(src, src_features, with_cache=True)
         device = src_features.device
 
@@ -317,7 +317,7 @@ class Translator(object):
             topk_log_probs = topk_scores * length_penalty
 
             # Resolve beam origin and true word ids.
-            topk_beam_index = topk_ids.div(vocab_size)
+            topk_beam_index = torch.div(topk_ids, vocab_size, rounding_mode='floor') #topk_ids//vocab_size
             topk_ids = topk_ids.fmod(vocab_size)
 
             # Map beam_index to batch_index in the flat representation.
