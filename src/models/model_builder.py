@@ -409,14 +409,13 @@ class AbsSummarizer(nn.Module):
             #print(graph_len)
            # print(len(graph_src))
             #print(graph_src)
-            graph_src = torch.tensor(graph_src)
             node_batch = graph_src[:, idx, :]
-            len_batch =torch.tensor(graph_len)[:, idx].clone()
+            len_batch =graph_len[:, idx].clone()
             # there may be some error if  seq_len = 0 in this batch
             for i in range(len(len_batch)):
                 len_batch[i] += (len_batch[i] == 0)
             node_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
-            node_enc_outputs, node_hidden = self.bert(node_batch.to(src.device), node_enc_mask.to(src.device))
+            node_enc_outputs, node_hidden = self.bert(node_batch, node_enc_mask)
             node_features.append(self.pooling(node_hidden, node_enc_outputs))
         node_features = torch.cat(node_features, 1)
 

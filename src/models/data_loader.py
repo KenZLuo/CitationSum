@@ -21,13 +21,23 @@ class Batch(object):
         pad_graph_inputs = []
         graph_input_len = []
         node_num = []
+        max_node_num = max([len(graph_input) for graph_input in graph_inputs])
         for graph_input in graph_inputs:
-            rtn_data = [g + [pad_id] * (max_len - len(g)) for g in graph_input]
+            rtn_data = []
+            each_input_len = []
+            for i in range(max_node_num):
+                if i < len(graph_input):
+                    rtn_data.append([graph_input[i] + [pad_id] * (max_len - len(graph_input[i]))])
+                    each_input_len.append(len(graph_input[i]))
+                else:
+                    rtn_data.append([pad_id] *max_len)
+                    each_input_len.append(0)
+            #rtn_data = [g + [pad_id] * (max_len - len(g)) for g in graph_input]
             pad_graph_inputs.append(rtn_data)
-            graph_input_len.append([len(g) for g in graph_input])
+            graph_input_len.append(each_input_len)
             node_num.append(len(graph_input)+1)
 
-        return pad_graph_inputs, graph_input_len, torch.tensor(node_num)
+        return torch.tensor(pad_graph_inputs), torch.tensor(graph_input_len), torch.tensor(node_num)
 
     def __init__(self, args, data=None, device=None, is_test=False):
         """Create a Batch from a list of examples."""
@@ -65,9 +75,9 @@ class Batch(object):
             setattr(self, 'segs', segs.to(device))
             setattr(self, 'mask_src', mask_src.to(device))
             #setattr(self, 'graph_src', mask_tgt.to(device))
-            setattr(self, 'graph_src', graph_src)
+            setattr(self, 'graph_src', graph_src.to(device))
             setattr(self, 'mask_tgt', mask_tgt.to(device))
-            setattr(self, 'graph_src_len', graph_src_len)
+            setattr(self, 'graph_src_len', graph_src_len.to(device))
             setattr(self, 'graph', pre_graph)
             setattr(self, 'node_num', node_num.to(device))
             if (is_test):
@@ -246,7 +256,7 @@ class DataIterator(object):
     def batch_buffer(self, data, batch_size):
         minibatch, size_so_far = [], 0
         for ex in data:
-            if(len(ex['src'])==0) or (len(ex['graph_src'])==0):
+            if(len(ex['src'])==0):
                 continue
             ex = self.preprocess(ex, self.is_test)
             if(ex is None):
