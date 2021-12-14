@@ -398,6 +398,7 @@ class AbsSummarizer(nn.Module):
     def forward(self, src, tgt, mask_src, graph_src, graph, graph_len, node_num):
         encoder_outputs, h_cnode_batch = self.bert(src, mask_src)
 
+        #print(src.shape, mask_src.shape)
         #print("encoder:", encoder_outputs.shape)
         node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
         #node_features = [hidden_outputs]
@@ -409,12 +410,13 @@ class AbsSummarizer(nn.Module):
             #print(graph_len)
            # print(len(graph_src))
             #print(graph_src)
-            node_batch = graph_src[:, idx, :]
+            node_batch = torch.squeeze(graph_src[:, idx, :],1)
             len_batch =graph_len[:, idx].clone()
             # there may be some error if  seq_len = 0 in this batch
             for i in range(len(len_batch)):
                 len_batch[i] += (len_batch[i] == 0)
             node_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
+            #print(node_batch.shape)
             node_enc_outputs, node_hidden = self.bert(node_batch, node_enc_mask)
             node_features.append(self.pooling(node_hidden, node_enc_outputs))
         node_features = torch.cat(node_features, 1)
