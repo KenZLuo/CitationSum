@@ -306,6 +306,7 @@ class TransformerDecoderState(DecoderState):
     def repeat_beam_size_times(self, beam_size):
         """ Repeat beam_size times along batch dimension. """
         self.src = self.src.data.repeat(1, beam_size, 1)
+        self.g_src = self.src.data.repeat(1, beam_size, 1)
 
     def map_batch_fn(self, fn):
         def _recursive_map(struct, batch_dim=0):
