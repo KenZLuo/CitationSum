@@ -393,6 +393,24 @@ class MultiHeadedAttention(nn.Module):
                                  self.linear_values(value)
                     key = shape(key)
                     value = shape(value)
+            elif type == "g_context":
+                query = self.linear_query(query)
+                if layer_cache is not None:
+                    if layer_cache["g_memory_keys"] is None:
+                        key, value = self.linear_keys(key), \
+                                     self.linear_values(value)
+                        key = shape(key)
+                        value = shape(value)
+                    else:
+                        key, value = layer_cache["g_memory_keys"], \
+                                     layer_cache["g_memory_values"]
+                    layer_cache["g_memory_keys"] = key
+                    layer_cache["g_memory_values"] = value
+                else:
+                    key, value = self.linear_keys(key), \
+                                 self.linear_values(value)
+                    key = shape(key)
+                    value = shape(value)
         else:
             key = self.linear_keys(key)
             value = self.linear_values(value)

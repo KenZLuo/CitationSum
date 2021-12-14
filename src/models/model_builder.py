@@ -135,7 +135,7 @@ class Bert(nn.Module):
                     last_hidden, pool_out = self.model(input_ids=x[: , w*512: w*512 + 512],
                             attention_mask= mask[: , w*512: w*512 + 512])
                     encoder_outputs.append(last_hidden)
-                    h_cnode_batch.append(pool_output)
+                    h_cnode_batch.append(pool_out)
                     encoder_outputs = torch.cat(encoder_outputs, dim=1)
                     h_cnode_batch = torch.max(torch.stack(h_cnode_batch, dim=0), dim=0)[0].squeeze(0)
             else:
@@ -185,9 +185,9 @@ class GNNEncoder(nn.Module):
 
         g = dgl.batch(graphs)
         if g.number_of_nodes() != len(node_feats):
-            logger.error("error: number of nodes in dgl graph do not equal nodes in input graph !!!")
-            logger.error(
-                f"number of nodes this batch:{sum(nodes_num_batch).item()}, number of num in dgl graph {g.number_of_nodes()}")
+            #logger.error("error: number of nodes in dgl graph do not equal nodes in input graph !!!")
+            # logger.error(
+                #f"number of nodes this batch:{sum(nodes_num_batch).item()}, number of num in dgl graph {g.number_of_nodes()}")
             assert g.number_of_nodes() == len(node_feats)
         g = g.to(node_feats.device)
         gnn_feat = self.gnn(g, node_feats)
@@ -397,19 +397,16 @@ class AbsSummarizer(nn.Module):
 
     def forward(self, src, tgt, mask_src, graph_src, graph, graph_len, node_num):
         encoder_outputs, h_cnode_batch = self.bert(src, mask_src)
-
         #print(src.shape, mask_src.shape)
-        #print("encoder:", encoder_outputs.shape)
         node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
-        #node_features = [hidden_outputs]
+        #node_features = [hidden_outputs]b
         neighbor_node_num = max(node_num - 1)
-        #print(neighbor_node_num)
+
         for idx in range(neighbor_node_num):
             #print(idx)
-            #print(graph_src)
+            # print('graph_src ', graph_src)
             #print(graph_len)
-           # print(len(graph_src))
-            #print(graph_src)
+            #print(len(graph_src))
             node_batch = torch.squeeze(graph_src[:, idx, :],1)
             len_batch =graph_len[:, idx].clone()
             # there may be some error if  seq_len = 0 in this batch
@@ -433,8 +430,8 @@ class AbsSummarizer(nn.Module):
 
     
         neighbor_feat = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
-        #print(neighbor_feat.shape)
+        nodes_src = torch.ones([neighbor_feat.size(0), neighbor_feat.size(1)], device=self.device)
 
-        dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
-        decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)
+        dec_state = self.decoder.init_decoder_state(src, nodes_src)
+        decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, neighbor_feat, dec_state)
         return decoder_outputs, None

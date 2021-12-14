@@ -31,18 +31,23 @@ class TransformerDecoderLayer(nn.Module):
         self.self_attn = MultiHeadedAttention(
             heads, d_model, dropout=dropout)
 
+        self.graph_attn = MultiHeadedAttention(
+            heads, d_model, dropout=dropout)
+        
         self.context_attn = MultiHeadedAttention(
             heads, d_model, dropout=dropout)
         self.feed_forward = PositionwiseFeedForward(d_model, d_ff, dropout)
         self.layer_norm_1 = nn.LayerNorm(d_model, eps=1e-6)
         self.layer_norm_2 = nn.LayerNorm(d_model, eps=1e-6)
+        self.layer_norm_3 = nn.LayerNorm(d_model, eps=1e-6)
+
         self.drop = nn.Dropout(dropout)
         mask = self._get_attn_subsequent_mask(MAX_SIZE)
         # Register self.mask as a buffer in TransformerDecoderLayer, so
         # it gets TransformerDecoderLayer's cuda behavior automatically.
         self.register_buffer('mask', mask)
 
-    def forward(self, inputs, memory_bank, src_pad_mask, tgt_pad_mask,
+    def forward(self, inputs, memory_bank, g_memory, src_pad_mask, g_memory_mask, tgt_pad_mask,
                 previous_input=None, layer_cache=None, step=None):
         """
         Args:
@@ -62,6 +67,7 @@ class TransformerDecoderLayer(nn.Module):
         dec_mask = torch.gt(tgt_pad_mask +
                             self.mask[:, :tgt_pad_mask.size(1),
                                       :tgt_pad_mask.size(1)], 0)
+        # 1) self attention
         input_norm = self.layer_norm_1(inputs)
         all_input = input_norm
         if previous_input is not None:
@@ -72,18 +78,25 @@ class TransformerDecoderLayer(nn.Module):
                                      mask=dec_mask,
                                      layer_cache=layer_cache,
                                      type="self")
-
         query = self.drop(query) + inputs
 
+        # 2) context attention with graph encoding
         query_norm = self.layer_norm_2(query)
-        mid = self.context_attn(memory_bank, memory_bank, query_norm,
+        query_graph = self.graph_attn(g_memory, g_memory, query_norm,
+                                        mask=g_memory_mask,
+                                        layer_cache=layer_cache,
+                                        type="g_context")
+        query_g = self.drop(query_graph) + query
+
+        # 3) context attention with bert encoding
+        query_g_norm = self.layer_norm_3(query_g)
+        mid = self.context_attn(memory_bank, memory_bank, query_g_norm,
                                       mask=src_pad_mask,
                                       layer_cache=layer_cache,
                                       type="context")
         output = self.feed_forward(self.drop(mid) + query)
 
         return output, all_input
-        # return output
 
     def _get_attn_subsequent_mask(self, size):
         """
@@ -151,17 +164,18 @@ class TransformerDecoder(nn.Module):
 
         self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
 
-    def forward(self, tgt, memory_bank, state, memory_lengths=None,
-                step=None, cache=None,memory_masks=None):
+    def forward(self, tgt, memory_bank, g_memory, state, memory_lengths=None,
+                step=None, cache=None, memory_masks=None, g_masks=None):
         """
         See :obj:`onmt.modules.RNNDecoderBase.forward()`
         """
 
         src_words = state.src
+        g_words = state.g_src
         tgt_words = tgt
         src_batch, src_len = src_words.size()
+        g_batch, g_len = g_words.size()
         tgt_batch, tgt_len = tgt_words.size()
-
         # Run the forward pass of the TransformerDecoder.
         # emb = self.embeddings(tgt, step=step)
         emb = self.embeddings(tgt)
@@ -171,6 +185,7 @@ class TransformerDecoder(nn.Module):
 
         src_memory_bank = memory_bank
         padding_idx = self.embeddings.padding_idx
+        
         tgt_pad_mask = tgt_words.data.eq(padding_idx).unsqueeze(1) \
             .expand(tgt_batch, tgt_len, tgt_len)
 
@@ -182,6 +197,14 @@ class TransformerDecoder(nn.Module):
             src_pad_mask = src_words.data.eq(padding_idx).unsqueeze(1) \
                 .expand(src_batch, tgt_len, src_len)
 
+        if (not g_masks is None):
+            g_len = g_masks.size(-1)
+            g_pad_mask = g_masks.expand(g_batch, tgt_len, g_len)
+
+        else:
+            g_pad_mask = g_words.data.eq(padding_idx).unsqueeze(1) \
+                .expand(g_batch, tgt_len, g_len)
+
         if state.cache is None:
             saved_inputs = []
 
@@ -192,15 +215,14 @@ class TransformerDecoder(nn.Module):
                     prev_layer_input = state.previous_layer_inputs[i]
             output, all_input \
                 = self.transformer_layers[i](
-                    output, src_memory_bank,
-                    src_pad_mask, tgt_pad_mask,
+                    output, src_memory_bank, g_memory,
+                    src_pad_mask, g_pad_mask, tgt_pad_mask,
                     previous_input=prev_layer_input,
                     layer_cache=state.cache["layer_{}".format(i)]
                     if state.cache is not None else None,
                     step=step)
             if state.cache is None:
                 saved_inputs.append(all_input)
-
         if state.cache is None:
             saved_inputs = torch.stack(saved_inputs)
 
@@ -213,12 +235,12 @@ class TransformerDecoder(nn.Module):
 
         return output, state
 
-    def init_decoder_state(self, src, memory_bank,
+    def init_decoder_state(self, src, g_src,
                            with_cache=False):
         """ Init decoder state """
-        state = TransformerDecoderState(src)
+        state = TransformerDecoderState(src, g_src)
         if with_cache:
-            state._init_cache(memory_bank, self.num_layers)
+            state._init_cache(self.num_layers)
         return state
 
 
@@ -226,13 +248,14 @@ class TransformerDecoder(nn.Module):
 class TransformerDecoderState(DecoderState):
     """ Transformer Decoder state base class """
 
-    def __init__(self, src):
+    def __init__(self, src, g_src):
         """
         Args:
             src (FloatTensor): a sequence of source words tensors
                     with optional feature tensors, of size (len x batch).
         """
         self.src = src
+        self.g_src = g_src
         self.previous_input = None
         self.previous_layer_inputs = None
         self.cache = None
@@ -246,9 +269,11 @@ class TransformerDecoderState(DecoderState):
                 and self.previous_layer_inputs is not None):
             return (self.previous_input,
                     self.previous_layer_inputs,
-                    self.src)
+                    self.src,
+                    self.g_src)
         else:
-            return (self.src,)
+            return (self.src, 
+                    self.g_src)
 
     def detach(self):
         if self.previous_input is not None:
@@ -256,20 +281,23 @@ class TransformerDecoderState(DecoderState):
         if self.previous_layer_inputs is not None:
             self.previous_layer_inputs = self.previous_layer_inputs.detach()
         self.src = self.src.detach()
+        self.g_src = self.g_src.detach()
 
     def update_state(self, new_input, previous_layer_inputs):
-        state = TransformerDecoderState(self.src)
+        state = TransformerDecoderState(self.src, self.g_src)
         state.previous_input = new_input
         state.previous_layer_inputs = previous_layer_inputs
         return state
 
-    def _init_cache(self, memory_bank, num_layers):
+    def _init_cache(self, num_layers):
         self.cache = {}
 
         for l in range(num_layers):
             layer_cache = {
                 "memory_keys": None,
-                "memory_values": None
+                "memory_values": None,
+                "g_memory_keys": None,
+                "g_memory_values": None
             }
             layer_cache["self_keys"] = None
             layer_cache["self_values"] = None
@@ -278,6 +306,7 @@ class TransformerDecoderState(DecoderState):
     def repeat_beam_size_times(self, beam_size):
         """ Repeat beam_size times along batch dimension. """
         self.src = self.src.data.repeat(1, beam_size, 1)
+        self.g_src = self.src.data.repeat(1, beam_size, 1)
 
     def map_batch_fn(self, fn):
         def _recursive_map(struct, batch_dim=0):
@@ -289,6 +318,7 @@ class TransformerDecoderState(DecoderState):
                         struct[k] = fn(v, batch_dim)
 
         self.src = fn(self.src, 0)
+        self.g_src = fn(self.g_src, 0)
         if self.cache is not None:
             _recursive_map(self.cache)
 
