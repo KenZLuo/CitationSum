@@ -27,7 +27,7 @@ class Batch(object):
             each_input_len = []
             for i in range(max_node_num):
                 if i < len(graph_input):
-                    rtn_data.append([graph_input[i] + [pad_id] * (max_len - len(graph_input[i]))])
+                    rtn_data.append(graph_input[i] + [pad_id] * (max_len - len(graph_input[i])))
                     each_input_len.append(len(graph_input[i]))
                 else:
                     rtn_data.append([pad_id] *max_len)
@@ -36,7 +36,8 @@ class Batch(object):
             pad_graph_inputs.append(rtn_data)
             graph_input_len.append(each_input_len)
             node_num.append(len(graph_input)+1)
-
+        #print(pad_graph_inputs)
+        #print(graph_input_len)
         return torch.tensor(pad_graph_inputs), torch.tensor(graph_input_len), torch.tensor(node_num)
 
     def __init__(self, args, data=None, device=None, is_test=False):
