@@ -231,8 +231,44 @@ class Translator(object):
         src = batch.src
         segs = batch.segs
         mask_src = batch.mask_src
+        graph_src = batch.graph_src
+        graph = batch.graph
+        graph_len = batch.graph_src_len
+        node_num = batch.node_num
 
-        src_features,_ = self.model.bert(src, mask_src)
+        src_features,src_hidden_features = self.model.bert(src, mask_src)
+        node_features = [self.model.pooling(src_hidden_feature, src_features)]
+        neighbor_node_num = max(node_num - 1)
+
+        for idx in range(neighbor_node_num):
+            # print(idx)
+            # print('graph_src ', graph_src)
+            # print(graph_len)
+            # print(len(graph_src))
+            node_batch = torch.squeeze(graph_src[:, idx, :], 1)
+            len_batch = graph_len[:, idx].clone()
+            # there may be some error if  seq_len = 0 in this batch
+            for i in range(len(len_batch)):
+                len_batch[i] += (len_batch[i] == 0)
+            node_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
+            # print(node_batch.shape)
+            node_enc_outputs, node_hidden = self.model.bert(node_batch, node_enc_mask)
+            node_features.append(self.pooling(node_hidden, node_enc_outputs))
+        node_features = torch.cat(node_features, 1)
+
+        node_feature_res = []
+        node_feature_idx = [0]
+        for idx, node_feature in enumerate(node_features):
+            n_num = node_num[idx]
+            mask = torch.arange(n_num)
+            node_feature_idx.append(node_feature_idx[-1] + len(mask))
+            node_feature_res.append(torch.index_select(node_feature, 0, torch.tensor(mask, device=node_feature.device)))
+        node_feature_res = torch.cat(node_feature_res, 0)
+        assert len(node_feature_res) == sum(node_num).item()
+
+        neighbor_feat = self.model.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
+        nodes_src = torch.ones([neighbor_feat.size(0), neighbor_feat.size(1)], device=self.device)
+
         dec_states = self.model.decoder.init_decoder_state(src, src_features, with_cache=True)
         device = src_features.device
 
@@ -274,7 +310,7 @@ class Translator(object):
             # Decoder forward.
             decoder_input = decoder_input.transpose(0,1)
 
-            dec_out, dec_states = self.model.decoder(decoder_input, src_features, dec_states,
+            dec_out, dec_states = self.model.decoder(decoder_input, src_features, nodes_src, dec_states,
                                                      step=step)
 
             # Generator forward.
