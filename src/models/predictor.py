@@ -4,7 +4,7 @@ from __future__ import print_function
 import codecs
 import os
 import math
-
+from fastNLP.core import seq_len_to_mask
 import torch
 
 from tensorboardX import SummaryWriter
@@ -237,7 +237,7 @@ class Translator(object):
         node_num = batch.node_num
 
         src_features,src_hidden_features = self.model.bert(src, mask_src)
-        node_features = [self.model.pooling(src_hidden_feature, src_features)]
+        node_features = [self.model.pooling(src_hidden_features, src_features)]
         neighbor_node_num = max(node_num - 1)
 
         for idx in range(neighbor_node_num):
@@ -253,7 +253,7 @@ class Translator(object):
             node_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
             # print(node_batch.shape)
             node_enc_outputs, node_hidden = self.model.bert(node_batch, node_enc_mask)
-            node_features.append(self.pooling(node_hidden, node_enc_outputs))
+            node_features.append(self.model.pooling(node_hidden, node_enc_outputs))
         node_features = torch.cat(node_features, 1)
 
         node_feature_res = []
@@ -266,11 +266,12 @@ class Translator(object):
         node_feature_res = torch.cat(node_feature_res, 0)
         assert len(node_feature_res) == sum(node_num).item()
 
+        device = src_features.device
         neighbor_feat = self.model.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
-        nodes_src = torch.ones([neighbor_feat.size(0), neighbor_feat.size(1)], device=self.device)
+        nodes_src = torch.ones([neighbor_feat.size(0), neighbor_feat.size(1)], device=device)
 
         dec_states = self.model.decoder.init_decoder_state(src, src_features, with_cache=True)
-        device = src_features.device
+        #device = src_features.device
 
         # Tile states and memory beam_size times.
         dec_states.map_batch_fn(
