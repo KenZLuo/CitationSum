@@ -82,6 +82,7 @@ class TransformerDecoderLayer(nn.Module):
 
         # 2) context attention with graph encoding
         query_norm = self.layer_norm_2(query)
+        #print(query_norm.shape, g_memory.shape)
         query_graph = self.graph_attn(g_memory, g_memory, query_norm,
                                         mask=g_memory_mask,
                                         layer_cache=layer_cache,

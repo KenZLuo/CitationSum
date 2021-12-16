@@ -270,7 +270,7 @@ class Translator(object):
         neighbor_feat = self.model.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
         nodes_src = torch.ones([neighbor_feat.size(0), neighbor_feat.size(1)], device=device)
 
-        dec_states = self.model.decoder.init_decoder_state(src, src_features, with_cache=True)
+        dec_states = self.model.decoder.init_decoder_state(src, nodes_src, with_cache=True)
         #device = src_features.device
 
         # Tile states and memory beam_size times.
@@ -311,7 +311,7 @@ class Translator(object):
             # Decoder forward.
             decoder_input = decoder_input.transpose(0,1)
 
-            dec_out, dec_states = self.model.decoder(decoder_input, src_features, nodes_src, dec_states,
+            dec_out, dec_states = self.model.decoder(decoder_input, src_features, neighbor_feat, dec_states,
                                                      step=step)
 
             # Generator forward.
