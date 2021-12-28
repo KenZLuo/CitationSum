@@ -267,8 +267,7 @@ class Translator(object):
         assert len(node_feature_res) == sum(node_num).item()
 
         device = src_features.device
-        neighbor_feat = self.model.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
-        nodes_src = torch.ones([neighbor_feat.size(0), neighbor_feat.size(1)], device=device)
+        neighbor_feat, nodes_src = self.model.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
 
         dec_states = self.model.decoder.init_decoder_state(src, nodes_src, with_cache=True)
         #device = src_features.device
@@ -277,6 +276,8 @@ class Translator(object):
         dec_states.map_batch_fn(
             lambda state, dim: tile(state, beam_size, dim=dim))
         src_features = tile(src_features, beam_size, dim=0)
+        neighbor_feat = tile(neighbor_feat, beam_size, dim=0)
+
         batch_offset = torch.arange(
             batch_size, dtype=torch.long, device=device)
         beam_offset = torch.arange(
@@ -307,7 +308,6 @@ class Translator(object):
 
         for step in range(max_length):
             decoder_input = alive_seq[:, -1].view(1, -1)
-
             # Decoder forward.
             decoder_input = decoder_input.transpose(0,1)
 
@@ -349,12 +349,11 @@ class Translator(object):
 
             curr_scores = curr_scores.reshape(-1, beam_size * vocab_size)
             topk_scores, topk_ids = curr_scores.topk(beam_size, dim=-1)
-
             # Recover log probs.
             topk_log_probs = topk_scores * length_penalty
 
             # Resolve beam origin and true word ids.
-            topk_beam_index = torch.div(topk_ids, vocab_size, rounding_mode='floor') #topk_ids//vocab_size
+            topk_beam_index = topk_ids.div(vocab_size) #topk_ids//vocab_size
             topk_ids = topk_ids.fmod(vocab_size)
 
             # Map beam_index to batch_index in the flat representation.
@@ -362,10 +361,9 @@ class Translator(object):
                     topk_beam_index
                     + beam_offset[:topk_beam_index.size(0)].unsqueeze(1))
             select_indices = batch_index.view(-1)
-
             # Append last prediction.
             alive_seq = torch.cat(
-                [alive_seq.index_select(0, select_indices),
+                [alive_seq.index_select(0, select_indices.long()),
                  topk_ids.view(-1, 1)], -1)
 
             is_finished = topk_ids.eq(self.end_token)
@@ -406,9 +404,11 @@ class Translator(object):
                     .view(-1, alive_seq.size(-1))
             # Reorder states.
             select_indices = batch_index.view(-1)
-            src_features = src_features.index_select(0, select_indices)
+
+            src_features = src_features.index_select(0, select_indices.long())
+            neighbor_feat = neighbor_feat.index_select(0, select_indices.long())
             dec_states.map_batch_fn(
-                lambda state, dim: state.index_select(dim, select_indices))
+                lambda state, dim: state.index_select(dim, select_indices.long()))
 
         return results
 

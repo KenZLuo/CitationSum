@@ -201,13 +201,15 @@ class GNNEncoder(nn.Module):
             next_idx = node_idx[i + 1]
             mask = torch.arange(curr_idx, next_idx, device=gnn_feat.device)
             output_feat = torch.index_select(gnn_feat, 0, mask)
+            nodes_src = torch.ones([b, n], device=gnn_feat.device)
             if output_feat.shape[0] < n:
                 pad_num = n - output_feat.shape[0]
                 extra_zeros = torch.zeros(pad_num, h, device=gnn_feat.device)
                 output_feat = torch.cat([output_feat, extra_zeros], 0)
+                nodes_src[i, n-pad_num: ] -= 1
             node_features[i] = output_feat
-
-        return node_features
+            
+        return node_features, nodes_src
 
 class GAT(nn.Module):
     def __init__(self,
@@ -429,8 +431,7 @@ class AbsSummarizer(nn.Module):
         assert len(node_feature_res) == sum(node_num).item()
 
     
-        neighbor_feat = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
-        nodes_src = torch.ones([neighbor_feat.size(0), neighbor_feat.size(1)], device=self.device)
+        neighbor_feat, nodes_src = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
 
         dec_state = self.decoder.init_decoder_state(src, nodes_src)
         decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, neighbor_feat, dec_state)

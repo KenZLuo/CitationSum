@@ -73,7 +73,7 @@ class TransformerDecoderLayer(nn.Module):
         if previous_input is not None:
             all_input = torch.cat((previous_input, input_norm), dim=1)
             dec_mask = None
-
+        
         query = self.self_attn(all_input, all_input, input_norm,
                                      mask=dec_mask,
                                      layer_cache=layer_cache,
@@ -170,7 +170,6 @@ class TransformerDecoder(nn.Module):
         """
         See :obj:`onmt.modules.RNNDecoderBase.forward()`
         """
-
         src_words = state.src
         g_words = state.g_src
         tgt_words = tgt
@@ -193,7 +192,6 @@ class TransformerDecoder(nn.Module):
         if (not memory_masks is None):
             src_len = memory_masks.size(-1)
             src_pad_mask = memory_masks.expand(src_batch, tgt_len, src_len)
-
         else:
             src_pad_mask = src_words.data.eq(padding_idx).unsqueeze(1) \
                 .expand(src_batch, tgt_len, src_len)
@@ -201,7 +199,6 @@ class TransformerDecoder(nn.Module):
         if (not g_masks is None):
             g_len = g_masks.size(-1)
             g_pad_mask = g_masks.expand(g_batch, tgt_len, g_len)
-
         else:
             g_pad_mask = g_words.data.eq(padding_idx).unsqueeze(1) \
                 .expand(g_batch, tgt_len, g_len)
