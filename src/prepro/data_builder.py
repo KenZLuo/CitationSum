@@ -210,18 +210,24 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
         g.add_edges(key_nodes, neighbor)
     return g
 
-def generate_graph_inputs(args, graph_struct, graph_strut_dict):
+def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
     graph_inputs = []
     for pid in graph_struct:
         graph_i = graph_strut_dict[pid][args.graph_input_type]
-        graph_input = clean([j for sub in graph_i for j in sub])
+        graph_input = ''
+        for sub in graph_i:
+            for each_sent in sub:
+                graph_input += each_sent + ' '
+        graph_input = clean(graph_input)
         graph_inputs.append(graph_input)
-    graph_inputs = []
+    graph_inp=[]
     for input in graph_inputs[1:]:
         tokenize_graph_input = [word_tokenize(t) for t in sent_tokenize(input)]
         tokenize_graph_input = tokenize_graph_input[:args.max_src_nsents]
         sent_label = greedy_selection(tokenize_graph_input, abstract, 3)
-        sent_label_id = range(tokenize_graph_input)
+        
+        sent_label_id = list(range(len(tokenize_graph_input)))
+        
         graph_input = []
         for i in sent_label:
             sent_label_id.remove(i)
@@ -233,9 +239,9 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict):
             for j in idx:
                 each_input.append(tokenize_graph_input[j])
             graph_input.append(each_input)
-        graph_inputs.append(graph_input)
+        graph_inp.append(graph_input)
 
-    return graph_inputs
+    return graph_inp
 
 def format_cite(args):
     root_data_dir = os.path.abspath(args.raw_path)
@@ -246,7 +252,7 @@ def format_cite(args):
     if args.setting == "transductive":
         graph_strut_dict = {}
         for dir in dirs:
-            source_txt_file = os.path.join(root_data_dir, '{}.jsonl'.format(dir))
+            source_txt_file = os.path.join(root_data_dir, '{}_updated.jsonl'.format(dir))
             #df = pd.read_json(path_or_buf=source_txt_file, lines=True)
             
             with open(source_txt_file, 'r') as f:
@@ -260,9 +266,9 @@ def format_cite(args):
         graph_val_dict = {}
         graph_test_dict = {}
 
-        test_path = os.path.join(root_data_dir, 'test.jsonl')
-        val_path = os.path.join(root_data_dir, 'val.jsonl')
-        train_path = os.path.join(root_data_dir, 'train.jsonl')
+        test_path = os.path.join(root_data_dir, 'test_updated.jsonl')
+        val_path = os.path.join(root_data_dir, 'val_updated.jsonl')
+        train_path = os.path.join(root_data_dir, 'train_updated.jsonl')
 
         #train_df = pd.read_json(path_or_buf=train_path, lines=True)
         #val_df = pd.read_json(path_or_buf=val_path, lines=True)
@@ -296,7 +302,7 @@ def format_cite(args):
 
     for corpus in dirs:
         data_lst = []
-        source_txt_file = os.path.join(root_data_dir, '{}.jsonl'.format(corpus))
+        source_txt_file = os.path.join(root_data_dir, '{}_updated.jsonl'.format(corpus))
         #df = pd.read_json(path_or_buf=source_txt_file, lines=True)
 
         with open(source_txt_file, 'r') as f:
@@ -305,7 +311,12 @@ def format_cite(args):
         for row in tqdm(json_main):
             row = json.loads(row)
             pid = row['paper_id']
-            introduction = [j for sub in row['introduction'] for j in sub]
+            introduction=''
+            for sub in row['introduction']:
+                for each_s in sub:
+                    introduction += each_s+' '
+            #introduction = [j for sub in row['introduction'] for j in sub]
+            #print(introduction)
             abstract = [word_tokenize(t) for t in sent_tokenize(clean(row['abstract']))]
             introduce = [word_tokenize(t) for t in sent_tokenize(clean(introduction))]
             if args.setting == "transductive":
@@ -551,6 +562,7 @@ class BertCiteData():
                 subtoken_idxs.append(each_graph_subtoken_idxs)
             graph_subtoken_idxs.append(subtoken_idxs)
 
+        #print(graph_subtoken_idxs)
         src_subtokens = tokenizer.tokenize(text)
         src_subtokens = [self.cls_token] + src_subtokens + [self.sep_token]
         src_subtoken_idxs = tokenizer.convert_tokens_to_ids(src_subtokens)
