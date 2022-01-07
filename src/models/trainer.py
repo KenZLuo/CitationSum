@@ -228,8 +228,8 @@ class Trainer(object):
             graph_len = batch.graph_src_len
             node_num = batch.node_num
             #print(mask_src)
-            outputs, scores = self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
-            batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization)
+            outputs, scores, doc_word_contra_loss, contra_loss = self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
+            batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization, doc_word_contra_loss, contra_loss)
 
             batch_stats.n_docs = int(src.size(0))
 

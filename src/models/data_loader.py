@@ -22,16 +22,29 @@ class Batch(object):
         graph_input_len = []
         node_num = []
         max_node_num = max([len(graph_input) for graph_input in graph_inputs])
+        #input_len = []
+        #for graph_input in graph_inputs:
+        #    for each_input in graph_input:
+        #        for input in each_input:
+        #            input_len.append(len(input))
+        #max_len = max(input_len)
+        #max_len = min([max_len, given_max_len])
         for graph_input in graph_inputs:
             rtn_data = []
             each_input_len = []
             for i in range(max_node_num):
+                e_rtn_data = []
+                e_input_len = []
                 if i < len(graph_input):
-                    rtn_data.append(graph_input[i] + [pad_id] * (max_len - len(graph_input[i])))
-                    each_input_len.append(len(graph_input[i]))
+                    for each_input in graph_input[i]:
+                        e_rtn_data.append(each_input + [pad_id] * (max_len - len(each_input)))
+                        e_input_len.append(len(each_input))
                 else:
-                    rtn_data.append([pad_id] *max_len)
-                    each_input_len.append(0)
+                    for j in range(len(graph_input[0])):
+                        e_rtn_data.append([pad_id] *max_len)
+                        e_input_len.append(0)
+                rtn_data.append(e_rtn_data)
+                each_input_len.append(e_input_len)
             #rtn_data = [g + [pad_id] * (max_len - len(g)) for g in graph_input]
             pad_graph_inputs.append(rtn_data)
             graph_input_len.append(each_input_len)
@@ -241,7 +254,12 @@ class DataIterator(object):
         segs = segs[:self.args.max_pos]
         #print(len(graph_src))
         #print(graph_src)
-        graph_src = [s[:-1][:self.args.max_graph_pos - 1] + end_id for s in graph_src]
+        graph_src_max = []
+        for s in graph_src:
+            each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in s]
+            graph_src_max.append(each_src)
+
+        #graph_src = [s[:-1][:self.args.max_graph_pos - 1] + end_id for s in graph_src]
         max_sent_id = bisect.bisect_left(clss, self.args.max_pos)
         src_sent_labels = src_sent_labels[:max_sent_id]
         clss = clss[:max_sent_id]
@@ -250,9 +268,9 @@ class DataIterator(object):
 
 
         if(is_test):
-            return src, tgt, segs, clss, src_sent_labels, graph_src, graph, src_txt, tgt_txt
+            return src, tgt, segs, clss, src_sent_labels, graph_src_max, graph, src_txt, tgt_txt
         else:
-            return src, tgt, segs, clss, src_sent_labels, graph_src, graph
+            return src, tgt, segs, clss, src_sent_labels, graph_src_max, graph
 
     def batch_buffer(self, data, batch_size):
         minibatch, size_so_far = [], 0

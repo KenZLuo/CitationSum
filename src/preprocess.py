@@ -43,7 +43,7 @@ def str2bool(v):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-pretrained_model", default='bert', type=str)
-    parser.add_argument("-graph_input_type", default="abstract", type=str)
+    parser.add_argument("-graph_input_type", default="introduction", type=str)
     parser.add_argument("-neighbor_type", default="cite", type=str)
     parser.add_argument("-mode", default='', type=str)
     parser.add_argument("-setting", default="inductive", type=str)
@@ -53,13 +53,14 @@ if __name__ == '__main__':
     parser.add_argument("-save_path", default='../../data/')
 
     parser.add_argument("-shard_size", default=2000, type=int)
+    parser.add_argument("-negative_number", default=2, type=int)
     parser.add_argument('-min_src_nsents', default=3, type=int)
     parser.add_argument('-max_src_nsents', default=100, type=int)
     parser.add_argument('-min_src_ntokens_per_sent', default=5, type=int)
     parser.add_argument('-max_src_ntokens_per_sent', default=200, type=int)
     parser.add_argument('-min_tgt_ntokens', default=5, type=int)
     parser.add_argument('-max_tgt_ntokens', default=500, type=int)
-    parser.add_argument('-max_neighbor_num', default=32, type=int)
+    parser.add_argument('-max_neighbor_num', default=16, type=int)
     parser.add_argument('-min_neighbor_num', default=0, type=int)
     parser.add_argument('-n_hop', default=1, type=int)
     

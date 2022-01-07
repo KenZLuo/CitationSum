@@ -211,11 +211,31 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
     return g
 
 def generate_graph_inputs(args, graph_struct, graph_strut_dict):
-    graph_inputs = [clean(graph_strut_dict[pid][args.graph_input_type]) for pid in graph_struct]
-    graph_inputs_tokenize = []
+    graph_inputs = []
+    for pid in graph_struct:
+        graph_i = graph_strut_dict[pid][args.graph_input_type]
+        graph_input = clean([j for sub in graph_i for j in sub])
+        graph_inputs.append(graph_input)
+    graph_inputs = []
     for input in graph_inputs[1:]:
-        graph_inputs_tokenize.append([word_tokenize(t) for t in sent_tokenize(input)])
-    return graph_inputs_tokenize
+        tokenize_graph_input = [word_tokenize(t) for t in sent_tokenize(input)]
+        tokenize_graph_input = tokenize_graph_input[:args.max_src_nsents]
+        sent_label = greedy_selection(tokenize_graph_input, abstract, 3)
+        sent_label_id = range(tokenize_graph_input)
+        graph_input = []
+        for i in sent_label:
+            sent_label_id.remove(i)
+            graph_input.append(tokenize_graph_input[i])
+        for iter in range(args.negative_number):
+            #if 3 < len(sent_label_id):
+            idx = random.sample(sent_label_id, 3)
+            each_input = []
+            for j in idx:
+                each_input.append(tokenize_graph_input[j])
+            graph_input.append(each_input)
+        graph_inputs.append(graph_input)
+
+    return graph_inputs
 
 def format_cite(args):
     root_data_dir = os.path.abspath(args.raw_path)
@@ -272,26 +292,28 @@ def format_cite(args):
         graph = {'train': graph_train_dict, 'val': graph_val_dict, 'test': graph_test_dict}
 
     data_dict = {}
+
+
     for corpus in dirs:
         data_lst = []
         source_txt_file = os.path.join(root_data_dir, '{}.jsonl'.format(corpus))
         #df = pd.read_json(path_or_buf=source_txt_file, lines=True)
-        
+
         with open(source_txt_file, 'r') as f:
             json_main = list(f)
         
         for row in tqdm(json_main):
             row = json.loads(row)
             pid = row['paper_id']
+            introduction = [j for sub in row['introduction'] for j in sub]
             abstract = [word_tokenize(t) for t in sent_tokenize(clean(row['abstract']))]
-            introduce = [word_tokenize(t) for t in sent_tokenize(clean(row['introduction']))]
-
+            introduce = [word_tokenize(t) for t in sent_tokenize(clean(introduction))]
             if args.setting == "transductive":
                 sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                graph_text = generate_graph_inputs(args,ub_graph_dict, graph_strut_dict)
+                graph_text = generate_graph_inputs(args,ub_graph_dict, graph_strut_dict, abstract)
             else:
                 sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                graph_text = generate_graph_inputs(args, sub_graph_dict, graph[corpus])
+                graph_text = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstract)
             node_num = len(graph_text)+1
             data_lst.append((corpus, pid, abstract, introduce, sub_graph_dict, graph_text, node_num, args))
         data_dict[corpus] = data_lst
@@ -510,22 +532,24 @@ class BertCiteData():
         sent_labels = [_sent_labels[i] for i in idxs]
         src = src[:self.args.max_src_nsents]
         sent_labels = sent_labels[:self.args.max_src_nsents]
-        graph_src = graph_src[:self.args.max_neighbor_num]
+        #graph_src = graph_src[:self.args.max_neighbor_num]
 
         if ((not is_test) and len(src) < self.args.min_src_nsents):
             return None
 
         src_txt = [' '.join(sent) for sent in src]
         text = ' {} {} '.format(self.sep_token, self.cls_token).join(src_txt)
-
         graph_subtoken_idxs = []
-        for each_graph_src in graph_src:
-            each_src = [' '.join(sent) for sent in each_graph_src]
-            each_text = ' {} {} '.format(self.sep_token, self.cls_token).join(each_src)
-            each_graph_src_subtokens = tokenizer.tokenize(each_text)
-            each_graph_src_subtokens = [self.cls_token] + each_graph_src_subtokens + [self.sep_token]
-            each_graph_subtoken_idxs = tokenizer.convert_tokens_to_ids(each_graph_src_subtokens)
-            graph_subtoken_idxs.append(each_graph_subtoken_idxs)
+        for each_graph_srcs in graph_src:
+            subtoken_idxs = []
+            for each_graph_src in each_graph_srcs:
+                each_src = [' '.join(sent) for sent in each_graph_src]
+                each_text = ' {} {} '.format(self.sep_token, self.cls_token).join(each_src)
+                each_graph_src_subtokens = tokenizer.tokenize(each_text)
+                each_graph_src_subtokens = [self.cls_token] + each_graph_src_subtokens + [self.sep_token]
+                each_graph_subtoken_idxs = tokenizer.convert_tokens_to_ids(each_graph_src_subtokens)
+                subtoken_idxs.append(each_graph_subtoken_idxs)
+            graph_subtoken_idxs.append(subtoken_idxs)
 
         src_subtokens = tokenizer.tokenize(text)
         src_subtokens = [self.cls_token] + src_subtokens + [self.sep_token]
