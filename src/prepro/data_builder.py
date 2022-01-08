@@ -212,19 +212,18 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
 
 def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
     graph_inputs = []
-    if graph_struct[1:]!=[]:
-        for pid in graph_struct[1:]:
-            graph_i = graph_strut_dict[pid][args.graph_input_type]
-            graph_input = ''
-            for sub in graph_i:
-                for each_sent in sub:
-                    graph_input += each_sent + ' '
-            graph_input = clean(graph_input)
-            graph_inputs.append(graph_input)
+    for pid in graph_struct:
+        graph_i = graph_strut_dict[pid][args.graph_input_type]
+        graph_input = ''
+        for sub in graph_i:
+            for each_sent in sub:
+                graph_input += each_sent + ' '
+        graph_input = clean(graph_input)
+        graph_inputs.append(graph_input)
 
     graph_inp=[]
-    if graph_inputs !=[]:
-        for input in graph_inputs:
+    if graph_inputs[1:] !=[]:
+        for input in graph_inputs[1:]:
             tokenize_graph_input = [word_tokenize(t) for t in sent_tokenize(input)]
             tokenize_graph_input = tokenize_graph_input[:args.max_src_nsents]
             sent_label = greedy_selection(tokenize_graph_input, abstract, 3)
