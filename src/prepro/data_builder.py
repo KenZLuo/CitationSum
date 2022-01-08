@@ -310,27 +310,15 @@ def format_cite(args):
 
         with open(source_txt_file, 'r') as f:
             json_main = list(f)
-        
-        for row in tqdm(json_main):
-            row = json.loads(row)
-            pid = row['paper_id']
-            introduction=''
-            for sub in row['introduction']:
-                for each_s in sub:
-                    introduction += each_s+' '
-            #introduction = [j for sub in row['introduction'] for j in sub]
-            #print(introduction)
-            abstract = [word_tokenize(t) for t in sent_tokenize(clean(row['abstract']))]
-            introduce = [word_tokenize(t) for t in sent_tokenize(clean(introduction))]
-            if args.setting == "transductive":
-                sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                graph_text = generate_graph_inputs(args,ub_graph_dict, graph_strut_dict, abstract)
-            else:
-                sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                graph_text = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstract)
-            node_num = len(graph_text)+1
-            data_lst.append((corpus, pid, abstract, introduce, sub_graph_dict, graph_text, node_num, args))
-        data_dict[corpus] = data_lst
+        input_param = []
+        for row in json_main:
+            input_param.append((row,args,corpus))
+        with tqdm(total=len(json_main)) as pbar:
+            for data in pool.imap(data_lst_gen,input_param):
+                data_lst.append(data)
+            data_dict[corpus] = data_lst
+            pool.close()
+            pbar.close()
 
     for d in dirs:
         a_lst = data_dict[d]
@@ -369,6 +357,29 @@ def format_cite(args):
                 shard_count += 1
         #end = time.time()
         #print('... Ending (4), time elapsed {}'.format(end - start))
+
+def data_lst_gen(params):
+    row,args,corpus = params
+    row = json.loads(row)
+    pid = row['paper_id']
+    introduction = ''
+    for sub in row['introduction']:
+        for each_s in sub:
+            introduction += each_s + ' '
+    # introduction = [j for sub in row['introduction'] for j in sub]
+    # print(introduction)
+    abstract = [word_tokenize(t) for t in sent_tokenize(clean(row['abstract']))]
+    introduce = [word_tokenize(t) for t in sent_tokenize(clean(introduction))]
+    if args.setting == "transductive":
+        sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
+        graph_text = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, abstract)
+    else:
+        sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
+        graph_text = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstract)
+
+    node_num = len(graph_text) + 1
+    data = (corpus, pid, abstract, introduce, sub_graph_dict, graph_text, node_num, args)
+    return data
 
 def _format_cite(params):
     corpus_type, pid, abstract, introduce, sub_graph_dict, graph_text, node_num, args = params
