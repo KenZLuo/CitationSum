@@ -256,7 +256,11 @@ class DataIterator(object):
         #print(graph_src)
         graph_src_max = []
         for s in graph_src:
-            each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in s]
+            new_s = []
+            new_s.append(s[0]+s[1]+s[2])
+            new_s.append(s[3])
+            new_s.append(s[4])
+            each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in new_s]
             graph_src_max.append(each_src)
 
         #graph_src = [s[:-1][:self.args.max_graph_pos - 1] + end_id for s in graph_src]

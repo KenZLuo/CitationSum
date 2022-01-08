@@ -136,8 +136,8 @@ class Bert(nn.Module):
                             attention_mask= mask[: , w*512: w*512 + 512])
                     encoder_outputs.append(last_hidden)
                     h_cnode_batch.append(pool_out)
-                    encoder_outputs = torch.cat(encoder_outputs, dim=1)
-                    h_cnode_batch = torch.max(torch.stack(h_cnode_batch, dim=0), dim=0)[0].squeeze(0)
+                encoder_outputs = torch.cat(encoder_outputs, dim=1)
+                h_cnode_batch = torch.max(torch.stack(h_cnode_batch, dim=0), dim=0)[0].squeeze(0)
             else:
                 #print(mask)
                 encoder_outputs, h_cnode_batch = self.model(input_ids=x,  attention_mask=mask)

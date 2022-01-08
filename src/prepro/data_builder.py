@@ -212,33 +212,36 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
 
 def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
     graph_inputs = []
-    for pid in graph_struct:
-        graph_i = graph_strut_dict[pid][args.graph_input_type]
-        graph_input = ''
-        for sub in graph_i:
-            for each_sent in sub:
-                graph_input += each_sent + ' '
-        graph_input = clean(graph_input)
-        graph_inputs.append(graph_input)
-    graph_inp=[]
-    for input in graph_inputs[1:]:
-        tokenize_graph_input = [word_tokenize(t) for t in sent_tokenize(input)]
-        tokenize_graph_input = tokenize_graph_input[:args.max_src_nsents]
-        sent_label = greedy_selection(tokenize_graph_input, abstract, 3)
+    if graph_struct is not None:
+        for pid in graph_struct:
+            graph_i = graph_strut_dict[pid][args.graph_input_type]
+            graph_input = ''
+            for sub in graph_i:
+                for each_sent in sub:
+                    graph_input += each_sent + ' '
+            graph_input = clean(graph_input)
+            graph_inputs.append(graph_input)
+        graph_inp=[]
+        for input in graph_inputs[1:]:
+            tokenize_graph_input = [word_tokenize(t) for t in sent_tokenize(input)]
+            tokenize_graph_input = tokenize_graph_input[:args.max_src_nsents]
+            sent_label = greedy_selection(tokenize_graph_input, abstract, 3)
         
-        sent_label_id = list(range(len(tokenize_graph_input)))
+            sent_label_id = list(range(len(tokenize_graph_input)))
         
-        graph_input = []
-        for i in sent_label:
-            sent_label_id.remove(i)
-            graph_input.append(tokenize_graph_input[i])
-        for iter in range(args.negative_number):
-            #if 3 < len(sent_label_id):
-            idx = random.sample(sent_label_id, 3)
+            graph_input = []
             each_input = []
-            for j in idx:
-                each_input.append(tokenize_graph_input[j])
+            for i in sent_label:
+                sent_label_id.remove(i)
+                each_input.append(tokenize_graph_input[i])
             graph_input.append(each_input)
+            for iter in range(args.negative_number):
+            #if 3 < len(sent_label_id):
+                idx = random.sample(sent_label_id, 3)
+                each_input = []
+                for j in idx:
+                    each_input.append(tokenize_graph_input[j])
+                graph_input.append(each_input)
         graph_inp.append(graph_input)
 
     return graph_inp
