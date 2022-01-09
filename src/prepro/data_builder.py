@@ -223,8 +223,8 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
 
     graph_inp=[]
     if graph_inputs[1:] !=[]:
-        for input in graph_inputs[1:]:
-            tokenize_graph_input = input[:args.max_src_nsents]
+        for e_input in graph_inputs[1:]:
+            tokenize_graph_input = e_input[:args.max_src_nsents]
             sent_label = greedy_selection(tokenize_graph_input, abstract, 3)
 
             sent_label_id = list(range(len(tokenize_graph_input)))
@@ -237,10 +237,10 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
             for iter in range(args.negative_number):
             #if 3 < len(sent_label_id):
                 idx = random.sample(sent_label_id, 3)
-                each_input = []
+                ea_input = []
                 for j in idx:
-                    each_input.append(tokenize_graph_input[j])
-                graph_input.append(each_input)
+                    ea_input.append(tokenize_graph_input[j])
+                graph_input.append(ea_input)
             assert len(graph_input)==(args.negative_number+1)
             graph_inp.append(graph_input)
     return graph_inp
@@ -319,15 +319,18 @@ def format_cite(args):
                     introduction.append(each_s.split())
             # introduction = [j for sub in row['introduction'] for j in sub]
             # print(introduction)
-            abstract = row['abstract'].split()
+            abstract = row['abstract']
+            abs_list = abstract.split(".")
+            abstr = [(each_s+" .").split() for each_s in abs_list if each_s]
+            #print(abstr)
             if args.setting == "transductive":
                 sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                graph_text = generate_graph_inputs(args, ub_graph_dict, graph_strut_dict, abstract)
+                graph_text = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, abstr)
             else:
                 sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                graph_text = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstract)
+                graph_text = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstr)
             node_num = len(graph_text) + 1
-            data_lst.append((corpus, pid, abstract, introduce, sub_graph_dict, graph_text, node_num, args))
+            data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, node_num, args))
         data_dict[corpus] = data_lst
 
     for d in dirs:

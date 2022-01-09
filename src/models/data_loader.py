@@ -29,6 +29,8 @@ class Batch(object):
         #            input_len.append(len(input))
         #max_len = max(input_len)
         #max_len = min([max_len, given_max_len])
+        if max_node_num ==0:
+            return torch.empty(len(graph_inputs),1),torch.zeros(len(graph_inputs),1),torch.ones(len(graph_inputs),1)
         for graph_input in graph_inputs:
             rtn_data = []
             each_input_len = []
@@ -256,11 +258,14 @@ class DataIterator(object):
         #print(graph_src)
         graph_src_max = []
         for s in graph_src:
-            new_s = []
-            new_s.append(s[0]+s[1]+s[2])
-            new_s.append(s[3])
-            new_s.append(s[4])
-            each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in new_s]
+            #new_s = []
+            #new_s.append(s[0]+s[1]+s[2])
+            #new_s.append(s[3])
+            #new_s.append(s[4])
+            if s == []:
+                each_src = s
+            else:
+                each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in new_s]
             graph_src_max.append(each_src)
 
         #graph_src = [s[:-1][:self.args.max_graph_pos - 1] + end_id for s in graph_src]
