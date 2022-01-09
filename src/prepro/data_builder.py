@@ -224,7 +224,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
     graph_inp=[]
     if graph_inputs[1:] !=[]:
         for input in graph_inputs[1:]:
-            tokenize_graph_input = [word_tokenize(t) for t in sent_tokenize(input)]
+            tokenize_graph_input = [word_tokenize(t) for t in sent_tokenize(fake_input)]
             tokenize_graph_input = tokenize_graph_input[:args.max_src_nsents]
             sent_label = greedy_selection(tokenize_graph_input, abstract, 3)
 
@@ -312,13 +312,19 @@ def format_cite(args):
             json_main = list(f)
         input_param = []
         for row in json_main:
-            input_param.append((row,args,corpus))
+            input_param.append((row,args,corpus,graph))
+        # pool = Pool(args.n_cpus)
         with tqdm(total=len(json_main)) as pbar:
-            for data in pool.imap(data_lst_gen,input_param):
-                data_lst.append(data)
+            for param in input_param[:30]:
+            # for data in pool.imap(data_lst_gen,input_param):
+                data_lst.append(data_lst_gen(param))
+                # data_lst.append(data)
+                pbar.update()
             data_dict[corpus] = data_lst
-            pool.close()
+            # pool.close()
             pbar.close()
+        break
+    return None
 
     for d in dirs:
         a_lst = data_dict[d]
@@ -359,7 +365,7 @@ def format_cite(args):
         #print('... Ending (4), time elapsed {}'.format(end - start))
 
 def data_lst_gen(params):
-    row,args,corpus = params
+    row,args,corpus,graph = params
     row = json.loads(row)
     pid = row['paper_id']
     introduction = ''
