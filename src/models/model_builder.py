@@ -406,7 +406,7 @@ class AbsSummarizer(nn.Module):
     def forward(self, src, tgt, mask_src, graph_src, graph, graph_len, node_num):
         encoder_outputs, h_cnode_batch = self.bert(src, mask_src)
         #print(src.shape, mask_src.shape)
-        nodel_features = [self.pooling(h_cnode_batch, encoder_outputs)]
+        node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
         #node_features = [hidden_outputs]b
         neighbor_node_num = max(node_num - 1)
         if neighbor_node_num!=0:
@@ -424,20 +424,7 @@ class AbsSummarizer(nn.Module):
                 temp_feat = torch.cat(temp_features, 1)
                 print(temp_feat.shape)
                 all_features.append(temp_feat)
-            #print(len(all_features))
-            pos_sim = self.cos(encoder_outputs, node_features).unsqueeze(2)
-            all_sim = [pos_sim]
-            for i in range(self.args.negative_number):
-                each_sim = self.cos(encoder_outputs, all_features[i+1][:,0,:]).unsqueeze(2)
-                all_sim.append(each_sim)
-            doc_word_sim_logits = torch.cat(all_sim, 2) / self.args.temp
-            
-            doc_word_labels = torch.zeros(doc_word_sim_logits.shape[0], doc_word_sim_logits.shape[1],dtype=torch.int64).to(encoder_outputs.device)
 
-            doc_word_contra_loss = self.loss(doc_word_sim_logits.transpose(2,1), doc_word_labels)
-        
-            doc_word_contra_loss = (doc_word_contra_loss * mask_src).sum()
-            print(doc_word_contra_loss)
             all_neighbor_feat = []
             all_nodes_src = []
             for node_features in all_features:
@@ -453,9 +440,24 @@ class AbsSummarizer(nn.Module):
                 neighbor_feat, nodes_src = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
                 all_neighbor_feat.append(neighbor_feat)
                 all_nodes_src.append(nodes_src)
-            
-            contra_loss = 0.0
+
+            pos_sim = self.cos(encoder_outputs, all_neighbor_feat[0][:, 0, :]).unsqueeze(2)
+            all_sim = [pos_sim]
             for i in range(self.args.negative_number):
+                each_sim = self.cos(encoder_outputs, all_neighbor_feat[i + 1][:, 0, :]).unsqueeze(2)
+                all_sim.append(each_sim)
+            doc_word_sim_logits = torch.cat(all_sim, 2) / self.args.temp
+
+            doc_word_labels = torch.zeros(doc_word_sim_logits.shape[0], doc_word_sim_logits.shape[1],
+                                          dtype=torch.int64).to(encoder_outputs.device)
+
+            doc_word_contra_loss = self.loss(doc_word_sim_logits.transpose(2, 1), doc_word_labels)
+
+            doc_word_contra_loss = (doc_word_contra_loss * mask_src).sum()
+            print(doc_word_contra_loss)
+
+            contra_loss = 0.0
+            for i in range(self.args.negative_number+1):
                 neighbor_feat = all_neighbor_feat[i] #batch_size*node_num*hidden_num
                 pos_sim = self.cos(neighbor_feat[1:,:], neighbor_feat [0,:])
                 sim = [pos_sim]
