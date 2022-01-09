@@ -265,7 +265,7 @@ class DataIterator(object):
             if s == []:
                 each_src = s
             else:
-                each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in new_s]
+                each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in s]
             graph_src_max.append(each_src)
 
         #graph_src = [s[:-1][:self.args.max_graph_pos - 1] + end_id for s in graph_src]

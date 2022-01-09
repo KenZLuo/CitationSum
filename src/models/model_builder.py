@@ -328,7 +328,7 @@ class AbsSummarizer(nn.Module):
         self.gnnEncoder = GNNEncoder(args)
         self.join = nn.Linear(2 * self.bert.model.config.hidden_size, self.args.hidden_dim)
         self.cos = nn.CosineSimilarity(dim=2, eps=1e-6)
-        self.loss = nn.CrossEntropyLoss()
+        self.loss = nn.CrossEntropyLoss(reduction='none')
         if bert_from_extractive is not None:
             self.bert.model.load_state_dict(
                 dict([(n[11:], p) for n, p in bert_from_extractive.items() if n.startswith('bert.model')]), strict=True)
@@ -406,12 +406,12 @@ class AbsSummarizer(nn.Module):
     def forward(self, src, tgt, mask_src, graph_src, graph, graph_len, node_num):
         encoder_outputs, h_cnode_batch = self.bert(src, mask_src)
         #print(src.shape, mask_src.shape)
-        node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
+        nodel_features = [self.pooling(h_cnode_batch, encoder_outputs)]
         #node_features = [hidden_outputs]b
         neighbor_node_num = max(node_num - 1)
         if neighbor_node_num!=0:
             all_features = []
-            for i in range(self.args.negative_number):
+            for i in range(self.args.negative_number+1):
                 temp_features = node_features
                 for idx in range(neighbor_node_num):
                     node_batch = torch.squeeze(graph_src[:, idx,i,:],1)
@@ -422,18 +422,22 @@ class AbsSummarizer(nn.Module):
                     node_enc_outputs, node_hidden = self.bert(node_batch, node_enc_mask)
                     temp_features.append(self.pooling(node_hidden, node_enc_outputs))
                 temp_feat = torch.cat(temp_features, 1)
+                print(temp_feat.shape)
                 all_features.append(temp_feat)
-
-            pos_sim = self.cos(encoder_outputs, all_features[0][:, 0, :])
+            #print(len(all_features))
+            pos_sim = self.cos(encoder_outputs, node_features).unsqueeze(2)
             all_sim = [pos_sim]
-            for i in range(1, self.args.negative_number):
-                each_sim = self.cos(encoder_outputs, all_features[i][:,0,:])
+            for i in range(self.args.negative_number):
+                each_sim = self.cos(encoder_outputs, all_features[i+1][:,0,:]).unsqueeze(2)
                 all_sim.append(each_sim)
             doc_word_sim_logits = torch.cat(all_sim, 2) / self.args.temp
-            doc_word_labels = torch.zeros(doc_word_sim_logits.shape(0), doc_word_sim_logits.shape(1), device=encoder_outputs.device)
-            doc_word_contra_loss = self.loss(doc_word_sim_logits, doc_word_labels)
-            doc_word_contra_loss = (doc_word_contra_loss * mask_src).sum()
+            
+            doc_word_labels = torch.zeros(doc_word_sim_logits.shape[0], doc_word_sim_logits.shape[1],dtype=torch.int64).to(encoder_outputs.device)
 
+            doc_word_contra_loss = self.loss(doc_word_sim_logits.transpose(2,1), doc_word_labels)
+        
+            doc_word_contra_loss = (doc_word_contra_loss * mask_src).sum()
+            print(doc_word_contra_loss)
             all_neighbor_feat = []
             all_nodes_src = []
             for node_features in all_features:
@@ -449,7 +453,7 @@ class AbsSummarizer(nn.Module):
                 neighbor_feat, nodes_src = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
                 all_neighbor_feat.append(neighbor_feat)
                 all_nodes_src.append(nodes_src)
-
+            
             contra_loss = 0.0
             for i in range(self.args.negative_number):
                 neighbor_feat = all_neighbor_feat[i] #batch_size*node_num*hidden_num
@@ -466,7 +470,7 @@ class AbsSummarizer(nn.Module):
                 each_contra_loss = (each_contra_loss*mask.float()).sum()
                 contra_loss += each_contra_loss
             contra_loss = contra_loss/self.args.negative_number
-
+            #print(contra_loss.shape, doc_word_contra_loss.shape)
             dec_state = self.decoder_with_graph.init_decoder_state(src, all_nodes_src[0],)
             decoder_outputs, state = self.decoder_with_graph(tgt[:, :-1], encoder_outputs, all_neighbor_feat[0], dec_state)
         else:

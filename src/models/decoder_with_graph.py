@@ -149,7 +149,7 @@ class TransformerDecoderWithGraph(nn.Module):
     """
 
     def __init__(self, num_layers, d_model, heads, d_ff, dropout, embeddings):
-        super(TransformerDecoder, self).__init__()
+        super(TransformerDecoderWithGraph, self).__init__()
 
         # Basic attributes.
         self.decoder_type = 'transformer'
