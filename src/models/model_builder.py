@@ -425,6 +425,21 @@ class AbsSummarizer(nn.Module):
                 #print(temp_feat.shape)
                 all_features.append(temp_feat)
 
+            pos_sim = self.cos(encoder_outputs, all_neighbor_feat[0][:, 0, :]).unsqueeze(2)
+            all_sim = [pos_sim]
+            for i in range(neighbor_node_num):
+                each_sim = self.cos(encoder_outputs, all_neighbor_feat[1][:, i+1, :]).unsqueeze(2)
+                all_sim.append(each_sim)
+            doc_word_sim_logits = torch.cat(all_sim, 2) / self.args.temp
+
+            doc_word_labels = torch.zeros(doc_word_sim_logits.shape[0], doc_word_sim_logits.shape[1],
+                                          dtype=torch.int64).to(encoder_outputs.device)
+
+            doc_word_contra_loss = self.loss(doc_word_sim_logits.transpose(2, 1), doc_word_labels)
+
+            doc_word_contra_loss = (doc_word_contra_loss * mask_src).sum() / doc_word_contra_loss.shape[1]
+            print(doc_word_contra_loss)
+
             all_neighbor_feat = []
             all_nodes_src = []
             for node_features in all_features:
@@ -441,27 +456,12 @@ class AbsSummarizer(nn.Module):
                 all_neighbor_feat.append(neighbor_feat)
                 all_nodes_src.append(nodes_src)
 
-            pos_sim = self.cos(encoder_outputs, all_neighbor_feat[0][:, 0, :]).unsqueeze(2)
-            all_sim = [pos_sim]
-            for i in range(self.args.negative_number):
-                each_sim = self.cos(encoder_outputs, all_neighbor_feat[i + 1][:, 0, :]).unsqueeze(2)
-                all_sim.append(each_sim)
-            doc_word_sim_logits = torch.cat(all_sim, 2) / self.args.temp
-
-            doc_word_labels = torch.zeros(doc_word_sim_logits.shape[0], doc_word_sim_logits.shape[1],
-                                          dtype=torch.int64).to(encoder_outputs.device)
-
-            doc_word_contra_loss = self.loss(doc_word_sim_logits.transpose(2, 1), doc_word_labels)
-
-            doc_word_contra_loss = (doc_word_contra_loss * mask_src).sum()/doc_word_contra_loss.shape[1]
-            print(doc_word_contra_loss)
-
             contra_loss = 0.0
             for i in range(self.args.negative_number+1):
                 neighbor_feat = all_neighbor_feat[i] #batch_size*node_num*hidden_num
                 pos_sim = self.cos(neighbor_feat[1:,:], neighbor_feat [0,:]).unsqueeze(2)
                 sim = [pos_sim]
-                all_id  = list(range(self.args.negative_number+1))
+                all_id = list(range(self.args.negative_number+1))
                 remain_negative = [each_i for each_i in all_id if each_i!=i]
                 for j in remain_negative:
                     each_sim = self.cos(neighbor_feat [1:,:], all_neighbor_feat[j][0,:]).unsqueeze(2)
@@ -469,7 +469,8 @@ class AbsSummarizer(nn.Module):
                 sim_logits = torch.cat(sim,2)/self.args.temp
                 labels = torch.zeros(sim_logits.shape[0],sim_logits.shape[1],device=neighbor_feat.device, dtype=torch.int64)
                 each_contra_loss = self.loss(sim_logits.transpose(2,1), labels)
-                mask = seq_len_to_mask(neighbor_node_num, pos_sim.shape[1])
+                mask = torch.arange(neighbor_node_num)[None, :] < node_num[:, None]
+                print(mask.shape)
                 each_contra_loss = (each_contra_loss*mask.float()).sum()/each_contra_loss.shape[1]
                 contra_loss += each_contra_loss
             contra_loss = contra_loss/self.args.negative_number
