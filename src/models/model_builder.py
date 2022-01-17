@@ -407,80 +407,91 @@ class AbsSummarizer(nn.Module):
         encoder_outputs, h_cnode_batch = self.bert(src, mask_src)
         #print(src.shape, mask_src.shape)
         node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
-        #node_features = [hidden_outputs]b
+        #node_features = [hidden_outputs]
+        # node_num = B x 1
         neighbor_node_num = max(node_num - 1)
-        if neighbor_node_num!=0:
-            all_features = []
-            for i in range(self.args.negative_number+1):
-                temp_features = node_features
-                for idx in range(neighbor_node_num):
-                    node_batch = torch.squeeze(graph_src[:, idx,i,:],1)
-                    len_batch =graph_len[:, idx,i].clone()
-                    for j in range(len(len_batch)):
-                        len_batch[j] += (len_batch[j] == 0)
-                    node_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
-                    node_enc_outputs, node_hidden = self.bert(node_batch, node_enc_mask)
-                    temp_features.append(self.pooling(node_hidden, node_enc_outputs))
-                temp_feat = torch.cat(temp_features, 1)
-                #print(temp_feat.shape)
-                all_features.append(temp_feat)
 
-            pos_sim = self.cos(encoder_outputs, all_neighbor_feat[0][:, 0, :]).unsqueeze(2)
-            all_sim = [pos_sim]
-            for i in range(neighbor_node_num):
-                each_sim = self.cos(encoder_outputs, all_neighbor_feat[1][:, i+1, :]).unsqueeze(2)
-                all_sim.append(each_sim)
-            doc_word_sim_logits = torch.cat(all_sim, 2) / self.args.temp
-
-            doc_word_labels = torch.zeros(doc_word_sim_logits.shape[0], doc_word_sim_logits.shape[1],
-                                          dtype=torch.int64).to(encoder_outputs.device)
-
-            doc_word_contra_loss = self.loss(doc_word_sim_logits.transpose(2, 1), doc_word_labels)
-
-            doc_word_contra_loss = (doc_word_contra_loss * mask_src).sum() / doc_word_contra_loss.shape[1]
-            print(doc_word_contra_loss)
-
-            all_neighbor_feat = []
-            all_nodes_src = []
-            for node_features in all_features:
-                node_feature_res = []
-                node_feature_idx = [0]
-                for idx, node_feature in enumerate(node_features):
-                    n_num = node_num[idx]
-                    mask = torch.arange(n_num)
-                    node_feature_idx.append(node_feature_idx[-1] + len(mask))
-                    node_feature_res.append(torch.index_select(node_feature, 0, torch.tensor(mask, device=node_feature.device)))
-                node_feature_res = torch.cat(node_feature_res, 0)
-                assert len(node_feature_res) == sum(node_num).item()
-                neighbor_feat, nodes_src = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
-                all_neighbor_feat.append(neighbor_feat)
-                all_nodes_src.append(nodes_src)
-
-            contra_loss = 0.0
-            for i in range(self.args.negative_number+1):
-                neighbor_feat = all_neighbor_feat[i] #batch_size*node_num*hidden_num
-                pos_sim = self.cos(neighbor_feat[1:,:], neighbor_feat [0,:]).unsqueeze(2)
-                sim = [pos_sim]
-                all_id = list(range(self.args.negative_number+1))
-                remain_negative = [each_i for each_i in all_id if each_i!=i]
-                for j in remain_negative:
-                    each_sim = self.cos(neighbor_feat [1:,:], all_neighbor_feat[j][0,:]).unsqueeze(2)
-                    sim.append(each_sim)
-                sim_logits = torch.cat(sim,2)/self.args.temp
-                labels = torch.zeros(sim_logits.shape[0],sim_logits.shape[1],device=neighbor_feat.device, dtype=torch.int64)
-                each_contra_loss = self.loss(sim_logits.transpose(2,1), labels)
-                mask = torch.arange(neighbor_node_num)[None, :] < node_num[:, None]
-                print(mask.shape)
-                each_contra_loss = (each_contra_loss*mask.float()).sum()/each_contra_loss.shape[1]
-                contra_loss += each_contra_loss
-            contra_loss = contra_loss/self.args.negative_number
-            #print(contra_loss.shape, doc_word_contra_loss.shape)
-            print(contra_loss)
-            dec_state = self.decoder_with_graph.init_decoder_state(src, all_nodes_src[0],)
-            decoder_outputs, state = self.decoder_with_graph(tgt[:, :-1], encoder_outputs, all_neighbor_feat[0], dec_state)
-        else:
+        if neighbor_node_num == 0:
+            # There is no nodes with neighbors
+            # print ("Neighbor node zero calculation")
             dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
             decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)
             doc_word_contra_loss = 0.0
             contra_loss = 0.0
+            return decoder_outputs, None, 0.0, 0.0
+
+        # graph_src = B x node_num x negative_sample+1 x max_len
+        # graph_len = B x node_num x negative_sample+1
+        all_features = []
+        for i in range(self.args.negative_number+1):
+            temp_features = node_features
+            for idx in range(neighbor_node_num):
+                node_batch = torch.squeeze(graph_src[:, idx,i,:],1)
+                len_batch =graph_len[:, idx,i].clone()
+                for j in range(len(len_batch)):
+                    len_batch[j] += (len_batch[j] == 0)
+                    node_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
+                    node_enc_outputs, node_hidden = self.bert(node_batch, node_enc_mask)
+                    temp_features.append(self.pooling(node_hidden, node_enc_outputs))
+            temp_feat = torch.cat(temp_features, 1)
+            all_features.append(temp_feat)
+
+        pos_sim = self.cos(encoder_outputs, all_features[0][:, 0, :]).unsqueeze(2)
+        all_sim = [pos_sim]
+        for i in range(neighbor_node_num):
+            each_sim = self.cos(encoder_outputs, all_features[1][:, i+1, :]).unsqueeze(2)
+            all_sim.append(each_sim)
+        doc_word_sim_logits = torch.cat(all_sim, 2) / self.args.temp
+
+        doc_word_labels = torch.zeros(doc_word_sim_logits.shape[0], doc_word_sim_logits.shape[1],
+                                      dtype=torch.int64).to(encoder_outputs.device)
+
+        doc_word_contra_loss = self.loss(doc_word_sim_logits.transpose(2, 1), doc_word_labels)
+
+        doc_word_contra_loss = (doc_word_contra_loss * mask_src).sum() / doc_word_contra_loss.shape[1]
+        # print(f"Doc word contrastive loss is {doc_word_contra_loss}")
+
+        all_neighbor_feat = []
+        all_nodes_src = []
+        for node_features in all_features:
+            node_feature_res = []
+            node_feature_idx = [0]
+            for idx, node_feature in enumerate(node_features):
+                n_num = node_num[idx]
+                mask = torch.arange(n_num)
+                node_feature_idx.append(node_feature_idx[-1] + len(mask))
+                # node_feature_res.append(torch.index_select(node_feature, 0, torch.tensor(mask, device=node_feature.device)))
+                node_feature_res.append(torch.index_select(node_feature, 0, mask.to(node_feature.device)))
+            node_feature_res = torch.cat(node_feature_res, 0)
+            assert len(node_feature_res) == sum(node_num).item()
+            neighbor_feat, nodes_src = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
+            all_neighbor_feat.append(neighbor_feat)
+            all_nodes_src.append(nodes_src)
+
+        contra_loss = 0.0
+        sim_logits_array = []
+        for i in range(self.args.negative_number+1):
+            neighbor_feat = all_neighbor_feat[i] #batch_size*node_num*hidden_num
+
+            pos_sim = self.cos(neighbor_feat[:,1:,:], neighbor_feat[:,0,:]).unsqueeze(2)
+            #print(pos_sim.shape)
+            sim = [pos_sim]
+            all_id = list(range(self.args.negative_number+1))
+            remain_negative = [each_i for each_i in all_id if each_i!=i]
+            for j in remain_negative:
+                each_sim = self.cos(neighbor_feat[:,1:,:], all_neighbor_feat[j][:,0,:]).unsqueeze(2)
+                sim.append(each_sim)
+            sim_logits = torch.cat(sim,2)/self.args.temp
+            labels_graph = torch.zeros(sim_logits.shape[0],sim_logits.shape[1],device=neighbor_feat.device, dtype=torch.int64)
+            each_contra_loss = self.loss(sim_logits.transpose(2,1), labels_graph)
+            mask_node = (torch.arange(neighbor_node_num)[None, :]).to(device=neighbor_feat.device) < node_num[:, None]
+                #print(mask_node.shape, sim_logits.shape, labels_graph.shape)
+                #print(each_contra_loss)
+            sim_logits_array.append((sim_logits.transpose(2, 1), labels_graph, mask_node))
+            each_contra_loss = (each_contra_loss*mask_node.float()).sum()/each_contra_loss.shape[1]
+            contra_loss += each_contra_loss
+        contra_loss = contra_loss/self.args.negative_number
+        # print(f"Contrastive loss is {contra_loss}")
+        dec_state = self.decoder_with_graph.init_decoder_state(src, all_nodes_src[0],)
+        decoder_outputs, state = self.decoder_with_graph(tgt[:, :-1], encoder_outputs, all_neighbor_feat[0], dec_state)
         return decoder_outputs, None, doc_word_contra_loss, contra_loss

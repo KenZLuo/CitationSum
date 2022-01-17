@@ -128,7 +128,8 @@ class LossComputeBase(nn.Module):
         shard_state = self._make_shard_state(batch, output)
         for shard in shards(shard_state, shard_size):
             loss, stats = self._compute_loss(batch, **shard)
-            ((loss+doc_word_contra_loss+contra_loss).div(float(normalization))).backward()
+            # ((loss+doc_word_contra_loss+contra_loss).div(float(normalization))).backward()
+            ((loss+contra_loss).div(float(normalization))).backward()
             batch_stats.update(stats)
 
         return batch_stats
@@ -281,6 +282,8 @@ def shards(state, shard_size, eval_only=False):
             yield dict(zip(keys, shard_tensors))
 
         # Assumed backprop'd
+        if True:
+            return
         variables = []
         for k, (v, v_split) in non_none.items():
             if isinstance(v, torch.Tensor) and state[k].requires_grad:
