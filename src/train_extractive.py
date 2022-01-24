@@ -19,6 +19,8 @@ from models.data_loader import load_dataset
 from models.model_builder import ExtSummarizer
 from models.trainer_ext import build_trainer
 from others.logging import logger, init_logger
+import wandb
+
 
 model_flags = ['hidden_size', 'ff_size', 'heads', 'inter_layers', 'encoder', 'ff_actv', 'use_interval', 'rnn_size']
 

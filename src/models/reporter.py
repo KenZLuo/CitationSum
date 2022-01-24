@@ -5,6 +5,7 @@ from datetime import datetime
 import time
 import math
 import sys
+import wandb
 
 from distributed import all_gather_list
 from others.logging import logger
@@ -165,12 +166,14 @@ class Statistics(object):
     * elapsed time
     """
 
-    def __init__(self, loss=0, n_words=0, n_correct=0):
+    def __init__(self, loss=0, n_words=0, n_correct=0, contra_loss=0, doc_word_contra_loss=0):
         self.loss = loss
         self.n_words = n_words
         self.n_docs = 0
         self.n_correct = n_correct
         self.n_src_words = 0
+        self.contra_loss = 0
+        self.doc_word_contra_loss = 0
         self.start_time = time.time()
 
     @staticmethod
@@ -226,6 +229,8 @@ class Statistics(object):
                 or not
 
         """
+        self.contra_loss = stat.contra_loss
+        self.doc_word_contra_loss = stat.doc_word_contra_loss
         self.loss += stat.loss
         self.n_words += stat.n_words
         self.n_correct += stat.n_correct
@@ -259,6 +264,13 @@ class Statistics(object):
            start (int): start time of step.
         """
         t = self.elapsed_time()
+        wandb.log({
+            "acc": self.accuracy(),
+            "ppl": self.ppl(),
+            "xent": self.xent(),
+            "lr": learning_rate,
+        }, step=step)
+
         logger.info(
             ("Step %2d/%5d; acc: %6.2f; ppl: %5.2f; xent: %4.2f; " +
              "lr: %7.8f; %3.0f/%3.0f tok/s; %6.0f sec")

@@ -1,9 +1,11 @@
 import os
+os.environ["WANDB_START_METHOD"] = "thread"
 
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
+import wandb
 import distributed
 from models.reporter import ReportMgr, Statistics
 from others.logging import logger
@@ -157,6 +159,7 @@ class Trainer(object):
                             true_batchs, normalization, total_stats,
                             report_stats)
 
+
                         report_stats = self._maybe_report_training(
                             step, train_steps,
                             self.optims[0].learning_rate,
@@ -231,6 +234,18 @@ class Trainer(object):
             outputs, scores, doc_word_contra_loss, contra_loss = self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
             batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization, doc_word_contra_loss, contra_loss)
 
+            try:
+                if contra_loss != 0.0:
+                    wandb.log({"loss": batch_stats.loss, "contra_loss": contra_loss, "doc_word_contra_loss": doc_word_contra_loss})
+            except Exception as e:
+                print (e)
+                experiment = wandb.init(
+                    project="ci-sum",
+                    entity="jimin",
+                    job_type="test",
+                )
+                if contra_loss != 0.0:
+                    wandb.log({"loss": batch_stats.loss, "contra_loss": contra_loss, "doc_word_contra_loss": doc_word_contra_loss})
             batch_stats.n_docs = int(src.size(0))
 
             total_stats.update(batch_stats)

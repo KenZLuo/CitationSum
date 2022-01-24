@@ -9,6 +9,7 @@ import os
 from others.logging import init_logger
 from train_abstractive import validate_abs, train_abs, baseline, test_abs, test_text_abs
 from train_extractive import train_ext, validate_ext, test_ext
+import wandb
 
 model_flags = ['hidden_size', 'ff_size', 'heads', 'emb_size', 'enc_layers', 'enc_hidden_size', 'enc_ff_size',
                'dec_layers', 'dec_hidden_size', 'dec_ff_size', 'encoder', 'ff_actv', 'use_interval']
@@ -125,6 +126,11 @@ if __name__ == '__main__':
     init_logger(args.log_file)
     device = "cpu" if args.visible_gpus == '-1' else "cuda"
     device_id = 0 if device == "cuda" else -1
+    experiment = wandb.init(
+        project="ci-sum",
+        entity="jimin",
+        job_type="test",
+    )
 
     if (args.task == 'abs'):
         if (args.mode == 'train'):

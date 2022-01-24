@@ -6,6 +6,7 @@ This includes: LossComputeBase and the standard NMTLossCompute, and
 """
 from __future__ import division
 import torch
+import wandb
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -127,14 +128,18 @@ class LossComputeBase(nn.Module):
         batch_stats = Statistics()
         shard_state = self._make_shard_state(batch, output)
         for shard in shards(shard_state, shard_size):
-            loss, stats = self._compute_loss(batch, **shard)
+            loss, stats = self._compute_loss(batch, contra_loss=contra_loss, doc_word_contra_loss=doc_word_contra_loss, **shard)
             # ((loss+doc_word_contra_loss+contra_loss).div(float(normalization))).backward()
-            ((loss+contra_loss).div(float(normalization))).backward()
+            if contra_loss != 0.0:
+                # ((loss+contra_loss+doc_word_contra_loss).div(float(normalization))).backward()
+                ((loss).div(float(normalization))).backward()
+            else:
+                ((loss).div(float(normalization))).backward()
             batch_stats.update(stats)
 
         return batch_stats
 
-    def _stats(self, loss, scores, target):
+    def _stats(self, loss, scores, target, contra_loss, doc_word_contra_loss):
         """
         Args:
             loss (:obj:`FloatTensor`): the loss computed by the loss criterion.
@@ -151,7 +156,9 @@ class LossComputeBase(nn.Module):
                           .sum() \
                           .item()
         num_non_padding = non_padding.sum().item()
-        return Statistics(loss.item(), num_non_padding, num_correct)
+        contra_loss = contra_loss.item() if contra_loss != 0.0 else 0.0
+        doc_word_contra_loss = doc_word_contra_loss.item() if doc_word_contra_loss != 0.0 else 0.0
+        return Statistics(loss.item(), num_non_padding, num_correct, contra_loss, doc_word_contra_loss)
 
     def _bottle(self, _v):
         return _v.view(-1, _v.size(2))
@@ -213,14 +220,16 @@ class NMTLossCompute(LossComputeBase):
             "target": batch.tgt[:,1:],
         }
 
-    def _compute_loss(self, batch, output, target):
+    def _compute_loss(self, batch, output, target, contra_loss, doc_word_contra_loss):
         bottled_output = self._bottle(output)
         scores = self.generator(bottled_output)
         gtruth =target.contiguous().view(-1)
 
         loss = self.criterion(scores, gtruth)
+        contra_loss = contra_loss.clone() if contra_loss != 0.0 else 0.0
+        doc_word_contra_loss = doc_word_contra_loss.clone() if doc_word_contra_loss != 0.0 else 0.0
 
-        stats = self._stats(loss.clone(), scores, gtruth)
+        stats = self._stats(loss.clone(), scores, gtruth, contra_loss, doc_word_contra_loss)
 
         return loss, stats
 
@@ -282,12 +291,13 @@ def shards(state, shard_size, eval_only=False):
             yield dict(zip(keys, shard_tensors))
 
         # Assumed backprop'd
-        if True:
-            return
+        # if True:
+            # return
         variables = []
         for k, (v, v_split) in non_none.items():
             if isinstance(v, torch.Tensor) and state[k].requires_grad:
                 variables.extend(zip(torch.split(state[k], shard_size),
                                      [v_chunk.grad for v_chunk in v_split]))
         inputs, grads = zip(*variables)
-        torch.autograd.backward(inputs, grads)
+        # if None not in grads:
+            # torch.autograd.backward(inputs, grads, retain_graph=True)
