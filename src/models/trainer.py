@@ -231,12 +231,12 @@ class Trainer(object):
             graph_len = batch.graph_src_len
             node_num = batch.node_num
             #print(mask_src)
-            outputs, scores, doc_word_contra_loss, contra_loss = self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
-            batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization, doc_word_contra_loss, contra_loss)
+            outputs, scores, doc_word_cos_sim, cos_sim = self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
+            batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization, cos_sim, doc_word_cos_sim)
 
             try:
-                if contra_loss != 0.0:
-                    wandb.log({"loss": batch_stats.loss, "contra_loss": contra_loss, "doc_word_contra_loss": doc_word_contra_loss})
+                if batch_stats.contra_loss != 0.0:
+                    wandb.log({"loss": batch_stats.loss, "contra_loss": batch_stats.contra_loss, "doc_word_contra_loss": batch_stats.doc_word_contra_loss})
             except Exception as e:
                 print (e)
                 experiment = wandb.init(
@@ -244,8 +244,8 @@ class Trainer(object):
                     entity="jimin",
                     job_type="test",
                 )
-                if contra_loss != 0.0:
-                    wandb.log({"loss": batch_stats.loss, "contra_loss": contra_loss, "doc_word_contra_loss": doc_word_contra_loss})
+                if batch_stats.contra_loss != 0.0:
+                    wandb.log({"loss": batch_stats.loss, "contra_loss": batch_stats.contra_loss, "doc_word_contra_loss": batch_stats.doc_word_contra_loss})
             batch_stats.n_docs = int(src.size(0))
 
             total_stats.update(batch_stats)

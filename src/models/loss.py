@@ -97,7 +97,7 @@ class LossComputeBase(nn.Module):
 
     def sharded_compute_loss(self, batch, output,
                               shard_size,
-                             normalization, doc_word_contra_loss, contra_loss):
+                             normalization, cos_sim, doc_word_cos_sim):
         """Compute the forward loss and backpropagate.  Computation is done
         with shards and optionally truncation for memory efficiency.
 
@@ -126,15 +126,12 @@ class LossComputeBase(nn.Module):
 
         """
         batch_stats = Statistics()
-        shard_state = self._make_shard_state(batch, output)
+        shard_state = self._make_shard_state(batch, output, cos_sim, doc_word_cos_sim)
         for shard in shards(shard_state, shard_size):
-            loss, stats = self._compute_loss(batch, contra_loss=contra_loss, doc_word_contra_loss=doc_word_contra_loss, **shard)
+            loss, stats = self._compute_loss(batch, **shard)
             # ((loss+doc_word_contra_loss+contra_loss).div(float(normalization))).backward()
-            if contra_loss != 0.0:
                 # ((loss+contra_loss+doc_word_contra_loss).div(float(normalization))).backward()
-                ((loss).div(float(normalization))).backward()
-            else:
-                ((loss).div(float(normalization))).backward()
+            ((loss).div(float(normalization))).backward()
             batch_stats.update(stats)
 
         return batch_stats
@@ -158,7 +155,8 @@ class LossComputeBase(nn.Module):
         num_non_padding = non_padding.sum().item()
         contra_loss = contra_loss.item() if contra_loss != 0.0 else 0.0
         doc_word_contra_loss = doc_word_contra_loss.item() if doc_word_contra_loss != 0.0 else 0.0
-        return Statistics(loss.item(), num_non_padding, num_correct, contra_loss, doc_word_contra_loss)
+        stat = Statistics(loss.item(), num_non_padding, num_correct, contra_loss, doc_word_contra_loss)
+        return stat
 
     def _bottle(self, _v):
         return _v.view(-1, _v.size(2))
@@ -213,23 +211,39 @@ class NMTLossCompute(LossComputeBase):
             self.criterion = nn.NLLLoss(
                 ignore_index=self.padding_idx, reduction='sum'
             )
+        self.loss = nn.CrossEntropyLoss(reduction='mean')
 
-    def _make_shard_state(self, batch, output):
+    def _make_shard_state(self, batch, output, cos_sim, doc_word_cos_sim):
         return {
             "output": output,
+            "cos_sim": cos_sim,
+            "doc_word_cos_sim": doc_word_cos_sim,
             "target": batch.tgt[:,1:],
         }
 
-    def _compute_loss(self, batch, output, target, contra_loss, doc_word_contra_loss):
+    def _compute_loss(self, batch, output, target, cos_sim=None, doc_word_cos_sim=None):
         bottled_output = self._bottle(output)
         scores = self.generator(bottled_output)
         gtruth =target.contiguous().view(-1)
 
         loss = self.criterion(scores, gtruth)
+
+        if cos_sim is not None:
+            labels = torch.zeros(doc_word_cos_sim.size(1)).long().to(doc_word_cos_sim.device)
+            doc_word_contra_loss = self.loss(doc_word_cos_sim.squeeze(0), labels)
+
+            negative_num = cos_sim.size(-1)
+            nn = int(cos_sim.size(-2) / negative_num)
+            labels = torch.arange(negative_num).repeat_interleave(nn).to(cos_sim.device)
+            contra_loss = self.loss(cos_sim.squeeze(0), labels)
+        else:
+            doc_word_contra_loss = 0.0
+            contra_loss = 0.0
         contra_loss = contra_loss.clone() if contra_loss != 0.0 else 0.0
         doc_word_contra_loss = doc_word_contra_loss.clone() if doc_word_contra_loss != 0.0 else 0.0
 
         stats = self._stats(loss.clone(), scores, gtruth, contra_loss, doc_word_contra_loss)
+        loss = loss + doc_word_contra_loss + contra_loss
 
         return loss, stats
 
@@ -299,5 +313,5 @@ def shards(state, shard_size, eval_only=False):
                 variables.extend(zip(torch.split(state[k], shard_size),
                                      [v_chunk.grad for v_chunk in v_split]))
         inputs, grads = zip(*variables)
-        # if None not in grads:
-            # torch.autograd.backward(inputs, grads, retain_graph=True)
+        if None not in grads:
+            torch.autograd.backward(inputs, grads, retain_graph=True)

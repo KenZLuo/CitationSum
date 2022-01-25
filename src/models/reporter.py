@@ -172,8 +172,8 @@ class Statistics(object):
         self.n_docs = 0
         self.n_correct = n_correct
         self.n_src_words = 0
-        self.contra_loss = 0
-        self.doc_word_contra_loss = 0
+        self.contra_loss = contra_loss
+        self.doc_word_contra_loss = doc_word_contra_loss
         self.start_time = time.time()
 
     @staticmethod

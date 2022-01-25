@@ -416,15 +416,13 @@ class AbsSummarizer(nn.Module):
             # print ("Neighbor node zero calculation")
             dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
             decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)
-            doc_word_contra_loss = 0.0
-            contra_loss = 0.0
-            return decoder_outputs, None, 0.0, 0.0
+            return decoder_outputs, None, None, None
 
         # graph_src = B x node_num x negative_sample+1 x max_len
         # graph_len = B x node_num x negative_sample+1
         all_features = []
         batch_size, nn, negative_num, max_len = graph_src.size()
-        # print (f"batch_size is {batch_size}, node_num is {nn}, negative_num is {negative_num}, max_len is {max_len}")
+        #print (f"batch_size is {batch_size}, node_num is {nn}, negative_num is {negative_num}, max_len is {max_len}")
         graph_batch = graph_src.reshape(-1, graph_src.size(-1))
         len_batch = (graph_len.reshape(-1) == 0)
         graph_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
@@ -439,8 +437,8 @@ class AbsSummarizer(nn.Module):
         norm_graph_features = graph_features / (graph_features.norm(dim=-1)[:, :, None])
         norm_encoder_outputs = encoder_outputs / (encoder_outputs.norm(dim=-1)[:, :, None])
         doc_word_cos_sim = torch.bmm(norm_encoder_outputs, norm_graph_features.permute(0, 2, 1))
-        labels = torch.zeros(encoder_outputs.size(1)).long().to(doc_word_cos_sim.device)
-        doc_word_contra_loss = self.loss(doc_word_cos_sim.squeeze(0), labels).mean()
+        # labels = torch.zeros(encoder_outputs.size(1)).long().to(doc_word_cos_sim.device)
+        # doc_word_contra_loss = self.loss(doc_word_cos_sim.squeeze(0), labels).mean()
         # print (f"Doc word contra loss is {doc_word_contra_loss}")
         # batch_size x word_num x (node_num x negative_num)
         # for i in range(self.args.negative_number+1):
@@ -478,7 +476,7 @@ class AbsSummarizer(nn.Module):
         graph_node_idxes = torch.arange(0, batch_size * (nn+1) * negative_num, nn+1)
         graph_node_num = [node_num[0] for _ in range(negative_num)]
         graph_neighbor_features, graph_nodes_src = self.gnnEncoder(negative_graphs, graph_node_features, graph_node_idxes, graph_node_num)
-
+        #print(graph_neighbor_features.shape)
         # all_neighbor_feat = []
         # all_nodes_src = []
         # for node_features in all_features:
@@ -498,7 +496,6 @@ class AbsSummarizer(nn.Module):
         #     all_neighbor_feat.append(neighbor_feat)
         #     all_nodes_src.append(nodes_src)
 
-        contra_loss = 0.0
         overall_feat = graph_neighbor_features.reshape(negative_num, batch_size, nn+1, -1)
         # overall_feat = torch.stack(all_neighbor_feat) # (negative_num + 1) * batch_size * node_num * hidden_num
         overall_feat = overall_feat / (overall_feat.norm(dim=-1)[:, :, :, None]+1e-8)
@@ -511,8 +508,6 @@ class AbsSummarizer(nn.Module):
         head_feat = head_feat.permute(1, 2, 0, 3).reshape(batch_size, negative_num, -1)
         cos_sim = torch.bmm(neighbor_feat, head_feat.permute(0, 2, 1))
         # batch_size * (node_num - 1 * (neightbor_num + 1)) * (1 * (neighbor_num + 1))
-        labels = torch.arange(negative_num).repeat_interleave(nn).to(cos_sim.device)
-        contra_loss = self.loss(cos_sim.squeeze(0), labels).mean()
 
         # for i in range(self.args.negative_number+1):
         #     neighbor_feat = all_neighbor_feat[i] #batch_size*node_num*hidden_num
@@ -539,4 +534,4 @@ class AbsSummarizer(nn.Module):
         # print(f"Contrastive loss is {contra_loss}")
         dec_state = self.decoder_with_graph.init_decoder_state(src, graph_nodes_src[0:1],)
         decoder_outputs, state = self.decoder_with_graph(tgt[:, :-1], encoder_outputs, graph_neighbor_features[0:1], dec_state)
-        return decoder_outputs, None, doc_word_contra_loss, contra_loss
+        return decoder_outputs, None, doc_word_cos_sim, cos_sim
