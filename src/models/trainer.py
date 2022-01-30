@@ -202,9 +202,9 @@ class Trainer(object):
                 graph_len = batch.graph_src_len
                 node_num = batch.node_num
                 # print(mask_src)
-                outputs, _, _, _ = self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
+                outputs, _,_,_= self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
 
-                batch_stats = self.loss.monolithic_compute_loss(batch, outputs)
+                batch_stats = self.loss.monolithic_compute_loss(batch,outputs)
                 stats.update(batch_stats)
             self._report_step(0, step, valid_stats=stats)
             return stats

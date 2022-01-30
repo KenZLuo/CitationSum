@@ -31,6 +31,14 @@ class Batch(object):
         #max_len = min([max_len, given_max_len])
         if max_node_num ==0:
             return torch.empty(len(graph_inputs),1),torch.zeros(len(graph_inputs),1),torch.ones(len(graph_inputs),1)
+        # Here we pad each graph with max node number and pad each src with max length. Note we put positive
+        # sample and negative samples of the same node together.
+        sample_number = max([len(node_sample) for node_sample in graph_inputs[0]])
+        # Batch_size x node_num x sample_num x token_num
+        # Notice that node num and token num is not the same in each graph
+        # rtn_data max_node_num x sample_num x max_token_num
+        # each_input_len node_num x sample_num x 1
+
         for graph_input in graph_inputs:
             rtn_data = []
             each_input_len = []
@@ -42,7 +50,8 @@ class Batch(object):
                         e_rtn_data.append(each_input + [pad_id] * (max_len - len(each_input)))
                         e_input_len.append(len(each_input))
                 else:
-                    for j in range(len(graph_input[0])):
+                    #print(graph_input)
+                    for j in range(sample_number):
                         e_rtn_data.append([pad_id] *max_len)
                         e_input_len.append(0)
                 rtn_data.append(e_rtn_data)

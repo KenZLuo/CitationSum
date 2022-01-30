@@ -76,7 +76,7 @@ class LossComputeBase(nn.Module):
         """
         return NotImplementedError
 
-    def monolithic_compute_loss(self, batch, output):
+    def monolithic_compute_loss(self, batch, output,cos_sim=None, doc_word_cos_sim=None):
         """
         Compute the forward loss for the batch.
 
@@ -90,7 +90,7 @@ class LossComputeBase(nn.Module):
         Returns:
             :obj:`onmt.utils.Statistics`: loss statistics
         """
-        shard_state = self._make_shard_state(batch, output)
+        shard_state = self._make_shard_state(batch, output,cos_sim, doc_word_cos_sim)
         _, batch_stats = self._compute_loss(batch, **shard_state)
 
         return batch_stats
