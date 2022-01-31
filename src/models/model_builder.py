@@ -531,6 +531,8 @@ class AbsSummarizer(nn.Module):
         #     contra_loss += each_contra_loss
         # contra_loss = contra_loss/self.args.negative_number
         # print(f"Contrastive loss is {contra_loss}")
-        dec_state = self.decoder_with_graph.init_decoder_state(src, graph_nodes_src[0:1],)
-        decoder_outputs, state = self.decoder_with_graph(tgt[:, :-1], encoder_outputs, graph_neighbor_features[0:1], dec_state)
+        #dec_state = self.decoder_with_graph.init_decoder_state(src, graph_nodes_src[0:1],)
+        #decoder_outputs, state = self.decoder_with_graph(tgt[:, :-1], encoder_outputs, graph_neighbor_features[0:1], dec_state)
+        dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
+        decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)
         return decoder_outputs, None, doc_word_cos_sim, cos_sim
