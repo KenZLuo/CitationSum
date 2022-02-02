@@ -243,7 +243,7 @@ class NMTLossCompute(LossComputeBase):
         doc_word_contra_loss = doc_word_contra_loss.clone() if doc_word_contra_loss != 0.0 else 0.0
 
         stats = self._stats(loss.clone(), scores, gtruth, contra_loss, doc_word_contra_loss)
-        loss = loss + doc_word_contra_loss + contra_loss
+        loss = loss #+ doc_word_contra_loss + contra_loss
 
         return loss, stats
 
