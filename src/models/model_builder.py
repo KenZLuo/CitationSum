@@ -3,6 +3,7 @@ import dgl
 import torch.nn.functional as F
 import torch
 import torch.nn as nn
+import numpy as np
 from pytorch_transformers import BertModel, BertConfig
 from torch.nn.init import xavier_uniform_
 from dgl.nn.pytorch import GATConv
@@ -187,8 +188,9 @@ class GNNEncoder(nn.Module):
         g = dgl.batch(graphs)
         if g.number_of_nodes() != len(node_feats):
             #logger.error("error: number of nodes in dgl graph do not equal nodes in input graph !!!")
-            # logger.error(
-                #f"number of nodes this batch:{sum(nodes_num_batch).item()}, number of num in dgl graph {g.number_of_nodes()}")
+            print(
+                f"number of nodes this batch:{sum(nodes_num_batch).item()}, number of num in dgl graph {g.number_of_nodes()} node feats {len(node_feats)}")
+
             assert g.number_of_nodes() == len(node_feats)
         g = g.to(node_feats.device)
         gnn_feat = self.gnn(g, node_feats)
@@ -427,11 +429,12 @@ class AbsSummarizer(nn.Module):
         graph_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
         graph_enc_outputs, graph_hidden = self.bert(graph_batch, graph_enc_mask)
         graph_features = self.pooling(graph_hidden, graph_enc_outputs)
-        graph_features = graph_features.reshape(nn, negative_num, 1, -1)
-        self_features = node_features[0].unsqueeze(1).repeat(1, negative_num, 1, 1)
+        graph_features = graph_features.reshape(nn, negative_num, batch_size, -1)
+        self_features = node_features[0].permute(1, 0, 2).unsqueeze(1).repeat(1, negative_num, 1, 1)
+        print (self_features.shape, graph_features.shape, batch_size, nn, negative_num, max_len)
         graph_features = torch.cat([self_features, graph_features], dim=0)
-        graph_features = graph_features.reshape((nn+1)*negative_num, 1, -1)
-        # (node_num x negative_num) x 1 x hidden_size
+        graph_features = graph_features.reshape((nn+1)*negative_num, batch_size, -1)
+        # (node_num x negative_num) x batch_size x hidden_size
         graph_features = graph_features.permute(1, 0, 2)
         norm_graph_features = graph_features / (graph_features.norm(dim=-1)[:, :, None])
         norm_encoder_outputs = encoder_outputs / (encoder_outputs.norm(dim=-1)[:, :, None])
@@ -468,12 +471,20 @@ class AbsSummarizer(nn.Module):
         # doc_word_contra_loss = (doc_word_contra_loss * mask_src).sum() / doc_word_contra_loss.shape[1]
         # print(f"Doc word contrastive loss is {doc_word_contra_loss}")
 
-        negative_graphs = [graph[0] for _ in range(negative_num)]
+        negative_graphs = [g for g in graph for _ in range(negative_num)]
         graph_node_features = graph_features.reshape(batch_size, nn+1, negative_num, -1)
         graph_node_features = graph_node_features.permute(0, 2, 1, 3)
         graph_node_features = graph_node_features.reshape(batch_size * negative_num * (nn+1), -1)
-        graph_node_idxes = torch.arange(0, batch_size * (nn+1) * negative_num, nn+1)
-        graph_node_num = [node_num[0] for _ in range(negative_num)]
+        # graph_node_idxes = torch.arange(0, batch_size * (nn+1) * negative_num, nn+1)
+        graph_node_num = [num for num in node_num for _ in range(negative_num)]
+        graph_node_idxes = np.cumsum(graph_node_num)
+        graph_node_idxes = [torch.zeros_like(graph_node_idxes[0]).long().to(graph_node_features.device)] + graph_node_idxes.tolist()
+        mask_indexes = []
+        start = 0
+        for num in graph_node_num:
+            mask_indexes.extend([index + start for index in range(num)])
+            start += nn + 1
+        graph_node_features = graph_node_features[mask_indexes, :]
         graph_neighbor_features, graph_nodes_src = self.gnnEncoder(negative_graphs, graph_node_features, graph_node_idxes, graph_node_num)
         #print(graph_neighbor_features.shape)
         # all_neighbor_feat = []
@@ -534,5 +545,6 @@ class AbsSummarizer(nn.Module):
         #dec_state = self.decoder_with_graph.init_decoder_state(src, graph_nodes_src[0:1],)
         #decoder_outputs, state = self.decoder_with_graph(tgt[:, :-1], encoder_outputs, graph_neighbor_features[0:1], dec_state)
         dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
+        print (mask_src.shape)
         decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)
         return decoder_outputs, None, doc_word_cos_sim, cos_sim

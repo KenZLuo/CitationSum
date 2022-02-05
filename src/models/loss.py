@@ -229,12 +229,15 @@ class NMTLossCompute(LossComputeBase):
         loss = self.criterion(scores, gtruth)
 
         if cos_sim is not None:
-            labels = torch.zeros(doc_word_cos_sim.size(1)).long().to(doc_word_cos_sim.device)
+            doc_word_cos_sim = doc_word_cos_sim.reshape(-1, doc_word_cos_sim.size(-1))
+            labels = torch.ones(doc_word_cos_sim.size(0)).long().to(doc_word_cos_sim.device)
             doc_word_contra_loss = self.loss(doc_word_cos_sim.squeeze(0), labels)
 
             negative_num = cos_sim.size(-1)
             nn = int(cos_sim.size(-2) / negative_num)
-            labels = torch.arange(negative_num).repeat_interleave(nn).to(cos_sim.device)
+            batch_size = cos_sim.size(0)
+            cos_sim = cos_sim.reshape(-1, negative_num)
+            labels = torch.arange(negative_num).repeat_interleave(nn).repeat(batch_size).to(cos_sim.device)
             contra_loss = self.loss(cos_sim.squeeze(0), labels)
         else:
             doc_word_contra_loss = 0.0
@@ -243,7 +246,7 @@ class NMTLossCompute(LossComputeBase):
         doc_word_contra_loss = doc_word_contra_loss.clone() if doc_word_contra_loss != 0.0 else 0.0
 
         stats = self._stats(loss.clone(), scores, gtruth, contra_loss, doc_word_contra_loss)
-        loss = loss #+ doc_word_contra_loss + contra_loss
+        loss = loss + doc_word_contra_loss + contra_loss
 
         return loss, stats
 
