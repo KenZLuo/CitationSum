@@ -224,7 +224,7 @@ class Trainer(object):
             #segs = batch.segs
             #clss = batch.clss
             mask_src = batch.mask_src
-            mask_tgt = batch.mask_tgt
+            #mask_tgt = batch.mask_tgt
             #mask_cls = batch.mask_cls
             graph_src = batch.graph_src
             graph = batch.graph
@@ -232,7 +232,7 @@ class Trainer(object):
             node_num = batch.node_num
             #print(mask_src)
             outputs, scores, doc_word_cos_sim, cos_sim = self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
-            batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization, cos_sim, doc_word_cos_sim)
+            batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization, mask_src, node_num, cos_sim, doc_word_cos_sim)
 
             try:
                 if batch_stats.contra_loss != 0.0:

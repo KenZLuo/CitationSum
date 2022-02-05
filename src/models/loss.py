@@ -211,7 +211,7 @@ class NMTLossCompute(LossComputeBase):
             self.criterion = nn.NLLLoss(
                 ignore_index=self.padding_idx, reduction='sum'
             )
-        self.loss = nn.CrossEntropyLoss(reduction='mean')
+        self.loss = nn.CrossEntropyLoss(reduction='none')
 
     def _make_shard_state(self, batch, output, cos_sim, doc_word_cos_sim):
         return {
@@ -221,7 +221,7 @@ class NMTLossCompute(LossComputeBase):
             "target": batch.tgt[:,1:],
         }
 
-    def _compute_loss(self, batch, output, target, cos_sim=None, doc_word_cos_sim=None):
+    def _compute_loss(self, batch, output, target, mask_src, node_num, cos_sim=None, doc_word_cos_sim=None):
         bottled_output = self._bottle(output)
         scores = self.generator(bottled_output)
         gtruth =target.contiguous().view(-1)
@@ -232,6 +232,7 @@ class NMTLossCompute(LossComputeBase):
             doc_word_cos_sim = doc_word_cos_sim.reshape(-1, doc_word_cos_sim.size(-1))
             labels = torch.ones(doc_word_cos_sim.size(0)).long().to(doc_word_cos_sim.device)
             doc_word_contra_loss = self.loss(doc_word_cos_sim.squeeze(0), labels)
+            doc_word_contra_loss = (doc_word_contra_loss * mask_src.float()).mean()
 
             negative_num = cos_sim.size(-1)
             nn = int(cos_sim.size(-2) / negative_num)
@@ -239,6 +240,9 @@ class NMTLossCompute(LossComputeBase):
             cos_sim = cos_sim.reshape(-1, negative_num)
             labels = torch.arange(negative_num).repeat_interleave(nn).repeat(batch_size).to(cos_sim.device)
             contra_loss = self.loss(cos_sim.squeeze(0), labels)
+            mask_graph = seq_len_to_mask(node_num, max_len=max(node_num)).to(cos_sim.device)
+            mask_graph = torch.tile(mask_graph, (3,1))
+            contra_loss = (contra_loss  * mask_graph.float()).mean()
         else:
             doc_word_contra_loss = 0.0
             contra_loss = 0.0

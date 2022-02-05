@@ -439,37 +439,6 @@ class AbsSummarizer(nn.Module):
         norm_graph_features = graph_features / (graph_features.norm(dim=-1)[:, :, None])
         norm_encoder_outputs = encoder_outputs / (encoder_outputs.norm(dim=-1)[:, :, None])
         doc_word_cos_sim = torch.bmm(norm_encoder_outputs, norm_graph_features.permute(0, 2, 1))
-        # labels = torch.zeros(encoder_outputs.size(1)).long().to(doc_word_cos_sim.device)
-        # doc_word_contra_loss = self.loss(doc_word_cos_sim.squeeze(0), labels).mean()
-        # print (f"Doc word contra loss is {doc_word_contra_loss}")
-        # batch_size x word_num x (node_num x negative_num)
-        # for i in range(self.args.negative_number+1):
-        #     temp_features = node_features
-        #     for idx in range(neighbor_node_num):
-        #         node_batch = torch.squeeze(graph_src[:, idx,i,:],1)
-        #         len_batch =graph_len[:, idx,i].clone()
-        #         for j in range(len(len_batch)):
-        #             len_batch[j] += (len_batch[j] == 0)
-        #             node_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
-        #             node_enc_outputs, node_hidden = self.bert(node_batch, node_enc_mask)
-        #             temp_features.append(self.pooling(node_hidden, node_enc_outputs))
-        #     temp_feat = torch.cat(temp_features, 1)
-        #     all_features.append(temp_feat) # batch_size * node_num * hidden_size
-
-        # pos_sim = self.cos(encoder_outputs, all_features[0][:, 0, :]).unsqueeze(2)
-        # all_sim = [pos_sim]
-        # for i in range(neighbor_node_num):
-        #     each_sim = self.cos(encoder_outputs, all_features[1][:, i+1, :]).unsqueeze(2)
-        #     all_sim.append(each_sim)
-        # doc_word_sim_logits = torch.cat(all_sim, 2) / self.args.temp
-
-        # doc_word_labels = torch.zeros(doc_word_sim_logits.shape[0], doc_word_sim_logits.shape[1],
-        #                               dtype=torch.int64).to(encoder_outputs.device)
-
-        # doc_word_contra_loss = self.loss(doc_word_sim_logits.transpose(2, 1), doc_word_labels)
-
-        # doc_word_contra_loss = (doc_word_contra_loss * mask_src).sum() / doc_word_contra_loss.shape[1]
-        # print(f"Doc word contrastive loss is {doc_word_contra_loss}")
 
         negative_graphs = [g for g in graph for _ in range(negative_num)]
         graph_node_features = graph_features.reshape(batch_size, nn+1, negative_num, -1)
@@ -487,24 +456,6 @@ class AbsSummarizer(nn.Module):
         graph_node_features = graph_node_features[mask_indexes, :]
         graph_neighbor_features, graph_nodes_src = self.gnnEncoder(negative_graphs, graph_node_features, graph_node_idxes, graph_node_num)
         #print(graph_neighbor_features.shape)
-        # all_neighbor_feat = []
-        # all_nodes_src = []
-        # for node_features in all_features:
-        #     node_feature_res = []
-        #     node_feature_idx = [0]
-        #     for idx, node_feature in enumerate(node_features):
-        #         n_num = node_num[idx]
-        #         mask = torch.arange(n_num)
-        #         node_feature_idx.append(node_feature_idx[-1] + len(mask))
-                # node_feature_res.append(torch.index_select(node_feature, 0, torch.tensor(mask, device=node_feature.device)))
-        #         node_feature_res.append(torch.index_select(node_feature, 0, mask.to(node_feature.device)))
-        #    node_feature_res = torch.cat(node_feature_res, 0)
-        #     assert len(node_feature_res) == sum(node_num).item()
-            # graph = B x node_num * neighbur * negative + 1 * token_length
-        #     print ("===========")
-        #     neighbor_feat, nodes_src = self.gnnEncoder(graph, node_feature_res, node_feature_idx, node_num)
-        #     all_neighbor_feat.append(neighbor_feat)
-        #     all_nodes_src.append(nodes_src)
 
         overall_feat = graph_neighbor_features.reshape(negative_num, batch_size, nn+1, -1)
         # overall_feat = torch.stack(all_neighbor_feat) # (negative_num + 1) * batch_size * node_num * hidden_num
@@ -512,38 +463,13 @@ class AbsSummarizer(nn.Module):
         neighbor_feat = overall_feat[:, :, 1:, :]
         head_feat = overall_feat[:, :, 0:1, :]
         batch_size = neighbor_feat.size(1)
-        nn = neighbor_feat.size(2)
+        #nn = neighbor_feat.size(2)
         # negative_num = self.args.negative_number+1
-        neighbor_feat = neighbor_feat.permute(1, 2, 0, 3).reshape(batch_size, nn * negative_num, -1)
+        neighbor_feat = neighbor_feat.permute(1, 2, 0, 3).reshape(batch_size, neighbor_feat.size(2)* negative_num, -1)
         head_feat = head_feat.permute(1, 2, 0, 3).reshape(batch_size, negative_num, -1)
         cos_sim = torch.bmm(neighbor_feat, head_feat.permute(0, 2, 1))
         # batch_size * (node_num - 1 * (neightbor_num + 1)) * (1 * (neighbor_num + 1))
 
-        # for i in range(self.args.negative_number+1):
-        #     neighbor_feat = all_neighbor_feat[i] #batch_size*node_num*hidden_num
-
-        #     pos_sim = self.cos(neighbor_feat[:,1:,:], neighbor_feat[:,0,:]).unsqueeze(2)
-            #print(pos_sim.shape)
-        #   sim = [pos_sim]
-        #     all_id = list(range(self.args.negative_number+1))
-        #     remain_negative = [each_i for each_i in all_id if each_i!=i]
-        #     for j in remain_negative:
-        #         each_sim = self.cos(neighbor_feat[:,1:,:], all_neighbor_feat[j][:,0,:]).unsqueeze(2)
-        #         sim.append(each_sim)
-        #     sim_logits = torch.cat(sim,2)/self.args.temp
-        #     labels_graph = torch.zeros(sim_logits.shape[0],sim_logits.shape[1],device=neighbor_feat.device, dtype=torch.int64)
-        #     each_contra_loss = self.loss(sim_logits.transpose(2,1), labels_graph)
-        #     mask_node = (torch.arange(neighbor_node_num)[None, :]).to(device=neighbor_feat.device) < node_num[:, None]
-                #print(mask_node.shape, sim_logits.shape, labels_graph.shape)
-                #print(each_contra_loss)
-        #     sim_logits_array.append((sim_logits.transpose(2, 1), labels_graph, mask_node))
-        #     each_contra_loss = (each_contra_loss*mask_node.float()).sum()/each_contra_loss.shape[1]
-        #     print (each_contra_loss)
-        #     contra_loss += each_contra_loss
-        # contra_loss = contra_loss/self.args.negative_number
-        # print(f"Contrastive loss is {contra_loss}")
-        #dec_state = self.decoder_with_graph.init_decoder_state(src, graph_nodes_src[0:1],)
-        #decoder_outputs, state = self.decoder_with_graph(tgt[:, :-1], encoder_outputs, graph_neighbor_features[0:1], dec_state)
         dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
         print (mask_src.shape)
         decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)
