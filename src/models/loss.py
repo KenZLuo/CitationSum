@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from models.reporter import Statistics
-
+from fastNLP.core import seq_len_to_mask
 
 def abs_loss(generator, symbols, vocab_size, device, train=True, label_smoothing=0.0):
     compute = NMTLossCompute(
@@ -76,7 +76,7 @@ class LossComputeBase(nn.Module):
         """
         return NotImplementedError
 
-    def monolithic_compute_loss(self, batch, output,cos_sim=None, doc_word_cos_sim=None):
+    def monolithic_compute_loss(self, batch, output,mask_src,mask_graph,cos_sim=None, doc_word_cos_sim=None):
         """
         Compute the forward loss for the batch.
 
@@ -90,14 +90,14 @@ class LossComputeBase(nn.Module):
         Returns:
             :obj:`onmt.utils.Statistics`: loss statistics
         """
-        shard_state = self._make_shard_state(batch, output,cos_sim, doc_word_cos_sim)
+        shard_state = self._make_shard_state(batch, output,mask_src, mask_graph,cos_sim, doc_word_cos_sim)
         _, batch_stats = self._compute_loss(batch, **shard_state)
 
         return batch_stats
 
     def sharded_compute_loss(self, batch, output,
                               shard_size,
-                             normalization, cos_sim, doc_word_cos_sim):
+                             normalization, mask_src, node_num, cos_sim, doc_word_cos_sim):
         """Compute the forward loss and backpropagate.  Computation is done
         with shards and optionally truncation for memory efficiency.
 
@@ -126,13 +126,16 @@ class LossComputeBase(nn.Module):
 
         """
         batch_stats = Statistics()
-        shard_state = self._make_shard_state(batch, output, cos_sim, doc_word_cos_sim)
+        shard_state = self._make_shard_state(batch, output, mask_src, node_num,cos_sim, doc_word_cos_sim)
         for shard in shards(shard_state, shard_size):
             loss, stats = self._compute_loss(batch, **shard)
             # ((loss+doc_word_contra_loss+contra_loss).div(float(normalization))).backward()
                 # ((loss+contra_loss+doc_word_contra_loss).div(float(normalization))).backward()
             ((loss).div(float(normalization))).backward()
             batch_stats.update(stats)
+            del loss
+            del stats
+        del shard_state
 
         return batch_stats
 
@@ -213,10 +216,12 @@ class NMTLossCompute(LossComputeBase):
             )
         self.loss = nn.CrossEntropyLoss(reduction='none')
 
-    def _make_shard_state(self, batch, output, cos_sim, doc_word_cos_sim):
+    def _make_shard_state(self, batch, output, mask_src, node_num, cos_sim, doc_word_cos_sim):
         return {
             "output": output,
             "cos_sim": cos_sim,
+            "mask_src":mask_src,
+            "node_num":node_num,
             "doc_word_cos_sim": doc_word_cos_sim,
             "target": batch.tgt[:,1:],
         }
@@ -232,17 +237,23 @@ class NMTLossCompute(LossComputeBase):
             doc_word_cos_sim = doc_word_cos_sim.reshape(-1, doc_word_cos_sim.size(-1))
             labels = torch.ones(doc_word_cos_sim.size(0)).long().to(doc_word_cos_sim.device)
             doc_word_contra_loss = self.loss(doc_word_cos_sim.squeeze(0), labels)
+            #print(doc_word_contra_loss.shape)
+            mask_src = mask_src.reshape(mask_src.shape[0]*mask_src.shape[1],-1).squeeze(-1)
             doc_word_contra_loss = (doc_word_contra_loss * mask_src.float()).mean()
 
+    
             negative_num = cos_sim.size(-1)
             nn = int(cos_sim.size(-2) / negative_num)
             batch_size = cos_sim.size(0)
+            #print(cos_sim.shape,nn,batch_size, negative_num)
             cos_sim = cos_sim.reshape(-1, negative_num)
             labels = torch.arange(negative_num).repeat_interleave(nn).repeat(batch_size).to(cos_sim.device)
             contra_loss = self.loss(cos_sim.squeeze(0), labels)
-            mask_graph = seq_len_to_mask(node_num, max_len=max(node_num)).to(cos_sim.device)
-            mask_graph = torch.tile(mask_graph, (3,1))
-            contra_loss = (contra_loss  * mask_graph.float()).mean()
+            mask_graph = seq_len_to_mask(node_num, max_len=nn).to(cos_sim.device)
+            mask_graph = torch.tile(mask_graph, (1,3))
+            mask_graph = mask_graph.reshape(mask_graph.shape[0]*mask_graph.shape[1],-1).squeeze(-1)
+            #print(contra_loss.shape, mask_graph.shape)
+            contra_loss = (contra_loss * mask_graph.float()).mean()
         else:
             doc_word_contra_loss = 0.0
             contra_loss = 0.0
@@ -251,6 +262,9 @@ class NMTLossCompute(LossComputeBase):
 
         stats = self._stats(loss.clone(), scores, gtruth, contra_loss, doc_word_contra_loss)
         loss = loss + doc_word_contra_loss + contra_loss
+
+        del contra_loss
+        del doc_word_contra_loss
 
         return loss, stats
 

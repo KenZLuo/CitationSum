@@ -4,6 +4,7 @@ os.environ["WANDB_START_METHOD"] = "thread"
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
+import GPUtil
 
 import wandb
 import distributed
@@ -204,7 +205,7 @@ class Trainer(object):
                 # print(mask_src)
                 outputs, _,_,_= self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
 
-                batch_stats = self.loss.monolithic_compute_loss(batch,outputs)
+                batch_stats = self.loss.monolithic_compute_loss(batch,outputs,mask_src,node_num)
                 stats.update(batch_stats)
             self._report_step(0, step, valid_stats=stats)
             return stats
@@ -263,6 +264,12 @@ class Trainer(object):
 
                 for o in self.optims:
                     o.step()
+            del outputs
+            del doc_word_cos_sim
+            del cos_sim
+            del batch_stats
+            torch.cuda.empty_cache()
+            # GPUtil.showUtilization()
 
         # in case of multi step gradient accumulation,
         # update only after accum batches

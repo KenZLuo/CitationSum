@@ -2,6 +2,7 @@ import copy
 import dgl
 import torch.nn.functional as F
 import torch
+import GPUtil
 import torch.nn as nn
 import numpy as np
 from pytorch_transformers import BertModel, BertConfig
@@ -406,7 +407,21 @@ class AbsSummarizer(nn.Module):
         return node_feature.unsqueeze(1)
 
     def forward(self, src, tgt, mask_src, graph_src, graph, graph_len, node_num):
-        encoder_outputs, h_cnode_batch = self.bert(src, mask_src)
+        srcs = src.split(1)
+        mask_srcs = mask_src.split(1)
+        encoder_outputs, h_cnode_batch = None, None
+        for sr, ms in zip(srcs, mask_srcs):
+            eo, hcb = self.bert(sr, ms)
+            if encoder_outputs is None:
+                encoder_outputs = eo
+                h_cnode_batch = hcb
+            else:
+                encoder_outputs = torch.cat([encoder_outputs, eo])
+                h_cnode_batch = torch.cat([h_cnode_batch, hcb])
+            del eo
+            del hcb
+            torch.cuda.empty_cache()
+
         #print(src.shape, mask_src.shape)
         node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
         #node_features = [hidden_outputs]
@@ -427,11 +442,24 @@ class AbsSummarizer(nn.Module):
         graph_batch = graph_src.reshape(-1, graph_src.size(-1))
         len_batch = (graph_len.reshape(-1) == 0)
         graph_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
-        graph_enc_outputs, graph_hidden = self.bert(graph_batch, graph_enc_mask)
+        graph_batches = graph_batch.split(4)
+        graph_enc_masks = graph_enc_mask.split(4)
+        graph_enc_outputs, graph_hidden = None, None
+        for bat, mask in zip(graph_batches, graph_enc_masks):
+            geo, gh = self.bert(bat, mask)
+            if graph_enc_outputs is None:
+                graph_enc_outputs, graph_hidden = geo, gh
+            else:
+                graph_enc_outputs = torch.cat([graph_enc_outputs, geo])
+                graph_hidden = torch.cat([graph_hidden, gh])
+            del geo
+            del gh
+            torch.cuda.empty_cache()
+        # graph_enc_outputs, graph_hidden = self.bert(graph_batch, graph_enc_mask)
         graph_features = self.pooling(graph_hidden, graph_enc_outputs)
         graph_features = graph_features.reshape(nn, negative_num, batch_size, -1)
         self_features = node_features[0].permute(1, 0, 2).unsqueeze(1).repeat(1, negative_num, 1, 1)
-        print (self_features.shape, graph_features.shape, batch_size, nn, negative_num, max_len)
+        #print (self_features.shape, graph_features.shape, batch_size, nn, negative_num, max_len)
         graph_features = torch.cat([self_features, graph_features], dim=0)
         graph_features = graph_features.reshape((nn+1)*negative_num, batch_size, -1)
         # (node_num x negative_num) x batch_size x hidden_size
@@ -471,6 +499,6 @@ class AbsSummarizer(nn.Module):
         # batch_size * (node_num - 1 * (neightbor_num + 1)) * (1 * (neighbor_num + 1))
 
         dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
-        print (mask_src.shape)
+        #print (mask_src.shape)
         decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)
         return decoder_outputs, None, doc_word_cos_sim, cos_sim
