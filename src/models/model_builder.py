@@ -407,8 +407,8 @@ class AbsSummarizer(nn.Module):
         return node_feature.unsqueeze(1)
 
     def forward(self, src, tgt, mask_src, graph_src, graph, graph_len, node_num):
-        srcs = src.split(1)
-        mask_srcs = mask_src.split(1)
+        srcs = src.split(100)
+        mask_srcs = mask_src.split(100)
         encoder_outputs, h_cnode_batch = None, None
         for sr, ms in zip(srcs, mask_srcs):
             eo, hcb = self.bert(sr, ms)
@@ -418,9 +418,9 @@ class AbsSummarizer(nn.Module):
             else:
                 encoder_outputs = torch.cat([encoder_outputs, eo])
                 h_cnode_batch = torch.cat([h_cnode_batch, hcb])
-            del eo
-            del hcb
-            torch.cuda.empty_cache()
+            # del eo
+            # del hcb
+            # torch.cuda.empty_cache()
 
         #print(src.shape, mask_src.shape)
         node_features = [self.pooling(h_cnode_batch, encoder_outputs)]
@@ -442,8 +442,8 @@ class AbsSummarizer(nn.Module):
         graph_batch = graph_src.reshape(-1, graph_src.size(-1))
         len_batch = (graph_len.reshape(-1) == 0)
         graph_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
-        graph_batches = graph_batch.split(4)
-        graph_enc_masks = graph_enc_mask.split(4)
+        graph_batches = graph_batch.split(400)
+        graph_enc_masks = graph_enc_mask.split(400)
         graph_enc_outputs, graph_hidden = None, None
         for bat, mask in zip(graph_batches, graph_enc_masks):
             geo, gh = self.bert(bat, mask)
@@ -452,9 +452,9 @@ class AbsSummarizer(nn.Module):
             else:
                 graph_enc_outputs = torch.cat([graph_enc_outputs, geo])
                 graph_hidden = torch.cat([graph_hidden, gh])
-            del geo
-            del gh
-            torch.cuda.empty_cache()
+            # del geo
+            # del gh
+            # torch.cuda.empty_cache()
         # graph_enc_outputs, graph_hidden = self.bert(graph_batch, graph_enc_mask)
         graph_features = self.pooling(graph_hidden, graph_enc_outputs)
         graph_features = graph_features.reshape(nn, negative_num, batch_size, -1)

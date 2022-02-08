@@ -268,7 +268,7 @@ class Trainer(object):
             del doc_word_cos_sim
             del cos_sim
             del batch_stats
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
             # GPUtil.showUtilization()
 
         # in case of multi step gradient accumulation,

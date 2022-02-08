@@ -305,7 +305,7 @@ class Translator(object):
             decoder_input = decoder_input.transpose(0,1)
 
             #if neighbor_node_num == 0:
-            dec_out, dec_states = self.model.decoder(decoder_input, src_features, dec_states)
+            dec_out, dec_states = self.model.decoder(decoder_input, src_features, dec_states,step=step)
             #else:
             #    dec_out, dec_states = self.model.decoder_with_graph(decoder_input, src_features, graph_neighbor_feats, dec_states,
             #                                             step=step)

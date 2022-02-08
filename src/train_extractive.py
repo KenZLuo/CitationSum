@@ -236,7 +236,7 @@ def train_single_ext(args, device_id):
 
     def train_iter_fct():
         return data_loader.Dataloader(args, load_dataset(args, 'train', shuffle=True), args.batch_size, device,
-                                      shuffle=True, is_test=False)
+                                      shuffle=True, is_test=False, pin_memory=False)
 
     model = ExtSummarizer(args, device, checkpoint)
     optim = model_builder.build_optim(args, model, checkpoint)
