@@ -78,7 +78,7 @@ if __name__ == '__main__':
     parser.add_argument("-beam_size", default=5, type=int)
     parser.add_argument("-min_length", default=15, type=int)
     parser.add_argument("-max_length", default=150, type=int)
-    parser.add_argument("-max_tgt_len", default=140, type=int)
+    parser.add_argument("-max_tgt_len", default=500, type=int)
     parser.add_argument("-num_heads", default=2, type=int)
     parser.add_argument("-num_layers", default=1, type=int)
     parser.add_argument("-num_out_heads", default=2, type=int)

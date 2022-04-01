@@ -264,12 +264,12 @@ class Statistics(object):
            start (int): start time of step.
         """
         t = self.elapsed_time()
-        wandb.log({
-            "acc": self.accuracy(),
-            "ppl": self.ppl(),
-            "xent": self.xent(),
-            "lr": learning_rate,
-        }, step=step)
+        # wandb.log({
+        #     "acc": self.accuracy(),
+        #     "ppl": self.ppl(),
+        #     "xent": self.xent(),
+        #     "lr": learning_rate,
+        # }, step=step)
 
         logger.info(
             ("Step %2d/%5d; acc: %6.2f; ppl: %5.2f; xent: %4.2f; " +

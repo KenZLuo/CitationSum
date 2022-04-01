@@ -501,4 +501,4 @@ class AbsSummarizer(nn.Module):
         dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
         #print (mask_src.shape)
         decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)
-        return decoder_outputs, None, doc_word_cos_sim, cos_sim
+        return decoder_outputs, None, None, None #doc_word_cos_sim, cos_sim
