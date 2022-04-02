@@ -324,11 +324,19 @@ def format_cite(args):
             abstr = [(each_s+" .").split() for each_s in abs_list if each_s]
             #print(abstr)
             if args.setting == "transductive":
-                sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                graph_text = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, abstr)
+                if corpus == "train":
+                    sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
+                    graph_text = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, abstr)
+                else:
+                    sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
+                    graph_text = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[:30])
             else:
-                sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                graph_text = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstr)
+                if corpus == "train":
+                    sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
+                    graph_text = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstr)
+                else:
+                    sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
+                    graph_text = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[:30])
             node_num = len(graph_text) + 1
             data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, node_num, args))
         data_dict[corpus] = data_lst
