@@ -227,13 +227,13 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
             tokenize_graph_input = e_input[:args.max_src_nsents]
             sent_label = greedy_selection(tokenize_graph_input, abstract, 3)
 
-            sent_label_id = list(range(len(tokenize_graph_input)))
+            #sent_label_id = list(range(len(tokenize_graph_input)))
             graph_input = []
             each_input = []
             for i in sent_label:
-                sent_label_id.remove(i)
                 each_input.append(tokenize_graph_input[i])
             graph_input.append(each_input)
+            sent_label_id = greedy_selection_contra(tokenize_graph_input, abstract, 12)
             for iter in range(args.negative_number):
             #if 3 < len(sent_label_id):
                 idx = random.sample(sent_label_id, 3)
@@ -448,6 +448,43 @@ def greedy_selection(doc_sent_list, abstract_sent_list, summary_size):
 
     return sorted(selected)
 
+def greedy_selection_contra(doc_sent_list, abstract_sent_list, summary_size):
+    def _rouge_clean(s):
+        return re.sub(r'[^a-zA-Z0-9 ]', '', s)
+
+    min_rouge = 1.0
+    abstract = sum(abstract_sent_list, [])
+    abstract = _rouge_clean(' '.join(abstract)).split()
+    sents = [_rouge_clean(' '.join(s)).split() for s in doc_sent_list]
+    evaluated_1grams = [_get_word_ngrams(1, [sent]) for sent in sents]
+    reference_1grams = _get_word_ngrams(1, [abstract])
+    evaluated_2grams = [_get_word_ngrams(2, [sent]) for sent in sents]
+    reference_2grams = _get_word_ngrams(2, [abstract])
+
+    selected = []
+    for s in range(summary_size):
+        cur_min_rouge = min_rouge
+        cur_id = -1
+        for i in range(len(sents)):
+            if (i in selected):
+                continue
+            c = selected + [i]
+            candidates_1 = [evaluated_1grams[idx] for idx in c]
+            candidates_1 = set.union(*map(set, candidates_1))
+            candidates_2 = [evaluated_2grams[idx] for idx in c]
+            candidates_2 = set.union(*map(set, candidates_2))
+            rouge_1 = cal_rouge(candidates_1, reference_1grams)['f']
+            rouge_2 = cal_rouge(candidates_2, reference_2grams)['f']
+            rouge_score = rouge_1 + rouge_2
+            if rouge_score < cur_min_rouge:
+                cur_min_rouge = rouge_score
+                cur_id = i
+        if (cur_id == -1):
+            return selected
+        selected.append(cur_id)
+        min_rouge = cur_min_rouge
+
+    return sorted(selected)
 
 def hashhex(s):
     """Returns a heximal formated SHA1 hash of the input string."""
