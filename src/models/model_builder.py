@@ -437,7 +437,7 @@ class AbsSummarizer(nn.Module):
 
         # graph_src = B x node_num x negative_sample+1 x max_len
         # graph_len = B x node_num x negative_sample+1
-        all_features = []
+        #all_features = []
         batch_size, nn, negative_num, max_len = graph_src.size()
         graph_batch = graph_src.reshape(-1, graph_src.size(-1))
         len_batch = (graph_len.reshape(-1) == 0)

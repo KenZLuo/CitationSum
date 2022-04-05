@@ -240,30 +240,33 @@ class Translator(object):
         node_features = [self.model.pooling(src_hidden_features, src_features)]
         neighbor_node_num = max(node_num - 1)
 
-        #if neighbor_node_num == 0:
-        dec_states = self.model.decoder.init_decoder_state(src, src_features, with_cache=True)
-        #else:
-        #    batch_size, nn, negative_num, max_len = graph_src.size()
-        #    graph_batch = graph_src.reshape(-1, graph_src.size(-1))
-        #    len_batch = (graph_len.reshape(-1) == 0)
-        #    graph_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
-        #    graph_enc_outputs, graph_hidden = self.model.bert(graph_batch, graph_enc_mask)
-        #    graph_features = self.model.pooling(graph_hidden, graph_enc_outputs)
-        #    graph_features = graph_features.reshape(nn, negative_num, 1, -1)
-        #    self_features = node_features[0].unsqueeze(1).repeat(1, negative_num, 1, 1)
-        #    graph_features = torch.cat([self_features, graph_features], dim=0)
-        #    graph_features = graph_features.reshape((nn+1)*negative_num, 1, -1)
-            # (node_num x negative_num) x 1 x hidden_size
-        #    graph_features = graph_features.permute(1, 0, 2)
-        #    negative_graphs = [graph[0] for _ in range(negative_num)]
-        #    graph_node_features = graph_features.reshape(batch_size, nn+1, negative_num, -1)
-        #    graph_node_features = graph_node_features.permute(0, 2, 1, 3)
-        #    graph_node_features = graph_node_features.reshape(batch_size * negative_num * (nn+1), -1)
-        #    graph_node_idxes = torch.arange(0, batch_size * (nn+1) * negative_num, nn+1)
-        #    graph_node_num = [node_num[0] for _ in range(negative_num)]
-        #    graph_neighbor_features, graph_nodes_src = self.model.gnnEncoder(negative_graphs, graph_node_features, graph_node_idxes, graph_node_num)
-        #    dec_states = self.model.decoder_with_graph.init_decoder_state(src, graph_nodes_src[0:1], with_cache=True)
-        #    graph_neighbor_feats = tile(graph_neighbor_features[0:1], beam_size, dim=0)
+        if neighbor_node_num == 0:
+            dec_states = self.model.decoder.init_decoder_state(src, src_features, with_cache=True)
+        else:
+            batch_size, nn, negative_num, max_len = graph_src.size()
+            graph_batch = graph_src.reshape(-1, graph_src.size(-1))
+            len_batch = (graph_len.reshape(-1) == 0)
+            graph_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
+            graph_batches = graph_batch.split(400)
+            graph_enc_masks = graph_enc_mask.split(400)
+            graph_enc_outputs, graph_hidden = None, None
+            for bat, mask in zip(graph_batches, graph_enc_masks):
+                geo, gh = self.bert(bat, mask)
+                if graph_enc_outputs is None:
+                    graph_enc_outputs, graph_hidden = geo, gh
+                else:
+                    graph_enc_outputs = torch.cat([graph_enc_outputs, geo])
+                    graph_hidden = torch.cat([graph_hidden, gh])
+            graph_enc_out = graph_enc_outputs.reshape(batch_size, nn, negative_num, max_len, -1)
+            graph_enc_out = graph_enc_out[:, :, 0:1, :, :].squeeze(2)
+            graph_enc_out = graph_enc_out.reshape(batch_size, nn * max_len, -1)
+            graph_f = graph_src[:, :, 0:1, :].squeeze(2)
+            graph_f = graph_f.reshape(batch_size, -1)
+            dec_src = torch.cat([src, graph_f], dim=1)
+            src_features = torch.cat([src_features, graph_enc_out], dim=1)
+            dec_states = self.model.decoder_with_graph.init_decoder_state(dec_src, src_features, with_cache=True)
+            #graph_neighbor_feats = tile(graph_neighbor_features[0:1], beam_size, dim=0)
+
         device = src_features.device
 
         # Tile states and memory beam_size times.
