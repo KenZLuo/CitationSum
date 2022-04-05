@@ -456,6 +456,13 @@ class AbsSummarizer(nn.Module):
             # del gh
             # torch.cuda.empty_cache()
         # graph_enc_outputs, graph_hidden = self.bert(graph_batch, graph_enc_mask)
+        graph_enc_out = graph_enc_outputs.reshape(batch_size,nn,negative_num,max_len, -1)
+        graph_enc_out = graph_enc_out[:,:,0:1,:,:].squeeze(2)
+        graph_enc_out = graph_enc_out.reshape(batch_size,nn*max_len,-1)
+        graph_f = graph_src[:,:,0:1,:].squeeze(2)
+        graph_f = graph_f.reshape(batch_size,-1)
+        #print(graph_enc_out.shape)
+        #print(graph_enc_out.shape, encoder_outputs.shape, graph_src.shape)
         graph_features = self.pooling(graph_hidden, graph_enc_outputs)
         graph_features = graph_features.reshape(nn, negative_num, batch_size, -1)
         self_features = node_features[0].permute(1, 0, 2).unsqueeze(1).repeat(1, negative_num, 1, 1)
@@ -483,7 +490,7 @@ class AbsSummarizer(nn.Module):
             start += nn + 1
         graph_node_features = graph_node_features[mask_indexes, :]
         graph_neighbor_features, graph_nodes_src = self.gnnEncoder(negative_graphs, graph_node_features, graph_node_idxes, graph_node_num)
-        #print(graph_neighbor_features.shape)
+        #print(graph_nodes_src.shape)
 
         overall_feat = graph_neighbor_features.reshape(negative_num, batch_size, nn+1, -1)
         # overall_feat = torch.stack(all_neighbor_feat) # (negative_num + 1) * batch_size * node_num * hidden_num
@@ -498,7 +505,10 @@ class AbsSummarizer(nn.Module):
         cos_sim = torch.bmm(neighbor_feat, head_feat.permute(0, 2, 1))
         # batch_size * (node_num - 1 * (neightbor_num + 1)) * (1 * (neighbor_num + 1))
 
-        dec_state = self.decoder.init_decoder_state(src, encoder_outputs)
+        #print(src.shape, encoder_outputs.shape, head_feat.shape)
+        dec_src=torch.cat([src,graph_f],dim=1)
+        dec_output = torch.cat([encoder_outputs,graph_enc_out],dim=1)
+        dec_state = self.decoder.init_decoder_state(dec_src, dec_output)
         #print (mask_src.shape)
-        decoder_outputs, state = self.decoder(tgt[:, :-1], encoder_outputs, dec_state)
-        return decoder_outputs, None, None, None #doc_word_cos_sim, cos_sim
+        decoder_outputs, state = self.decoder(tgt[:, :-1], dec_output, dec_state)
+        return decoder_outputs, None, doc_word_cos_sim, cos_sim
