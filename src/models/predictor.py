@@ -251,7 +251,7 @@ class Translator(object):
             graph_enc_masks = graph_enc_mask.split(400)
             graph_enc_outputs, graph_hidden = None, None
             for bat, mask in zip(graph_batches, graph_enc_masks):
-                geo, gh = self.bert(bat, mask)
+                geo, gh = self.model.bert(bat, mask)
                 if graph_enc_outputs is None:
                     graph_enc_outputs, graph_hidden = geo, gh
                 else:

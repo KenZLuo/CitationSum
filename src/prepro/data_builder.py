@@ -225,7 +225,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
     if graph_inputs[1:] !=[]:
         for e_input in graph_inputs[1:]:
             tokenize_graph_input = e_input[:args.max_src_nsents]
-            sent_label = greedy_selection(tokenize_graph_input, abstract, 20)
+            sent_label = greedy_selection(tokenize_graph_input, abstract, 30)
             sent_label_id = list(range(len(tokenize_graph_input)))
             graph_input = []
             each_input = []
@@ -270,6 +270,7 @@ def format_cite(args):
         graph_train_dict = {}
         graph_val_dict = {}
         graph_test_dict = {}
+
 
         test_path = os.path.join(root_data_dir, 'test_updated.jsonl')
         val_path = os.path.join(root_data_dir, 'val_updated.jsonl')
