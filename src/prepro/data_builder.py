@@ -2,6 +2,7 @@ import gc
 import glob
 from  tqdm import tqdm
 import hashlib
+import numpy as np
 import itertools
 import json
 import os
@@ -222,11 +223,12 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
         graph_inputs.append(graph_input)
 
     graph_inp=[]
-    score_list []
+    score_list = []
     if graph_inputs[1:] !=[]:
         for e_input in graph_inputs[1:]:
             tokenize_graph_input = e_input[:args.max_src_nsents]
-            sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 10)
+            #sent_label, r_score 
+            sent_label, r_score = greedy_selection(tokenize_graph_input, abstract,6)
             score_list.append(r_score)
             sent_label_id = list(range(len(tokenize_graph_input)))
             graph_input = []
@@ -234,7 +236,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
             count = 0
             for i in sent_label:
                 sent_label_id.remove(i)
-                if count < 4:
+                if count < 6:
                     each_input.append(tokenize_graph_input[i])
                 count += 1
             graph_input.append(each_input)
@@ -248,13 +250,15 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
                 graph_input.append(ea_input)
             assert len(graph_input)==(args.negative_number+1)
             graph_inp.append(graph_input)
+    print(score_list)
+    #print(np.array(score_list).mean())
     return graph_inp, score_list
 
 def generate_graph_inputs_abs(args, graph_struct, graph_strut_dict, abstract):
     graph_inputs = []
     for pid in graph_struct:
         graph_i = graph_strut_dict[pid]['abstract']
-        abs_list = abstract.split(".")
+        abs_list = graph_i.split(".")
         abstr = [(each_s + " .").split() for each_s in abs_list if each_s]
         graph_inputs.append(abstr)
 
@@ -263,7 +267,7 @@ def generate_graph_inputs_abs(args, graph_struct, graph_strut_dict, abstract):
         for e_input in graph_inputs[1:]:
             r_score = cal_score(e_input, abstract)
             score_list.append(r_score)
-
+    print(score_list)
     return score_list
 
 def format_cite(args):
@@ -349,20 +353,20 @@ def format_cite(args):
             if args.setting == "transductive":
                 if corpus == "train":
                     sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                    graph_text, score_list = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, abstr)
+                    graph_text, score_list = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[:30])
                 else:
                     sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
                     graph_text, score_list = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[:30])
             else:
                 if corpus == "train":
                     sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                    graph_text, score_list = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstr)
+                    graph_text, score_list = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[:30])
                 else:
                     sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
                     graph_text, score_list = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[:30])
             if score_list != []:
                 scores += score_list
-                print(score_list)
+                #print(score_list)
 
             node_num = len(graph_text) + 1
             data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, node_num, args))
@@ -462,7 +466,7 @@ def format_calculate_abs(args):
 
         graph = {'train': graph_train_dict, 'val': graph_val_dict, 'test': graph_test_dict}
 
-    score_list = []
+    scores = []
     for corpus in dirs:
         data_lst = []
         source_txt_file = os.path.join(root_data_dir, '{}.jsonl'.format(corpus))
@@ -487,7 +491,7 @@ def format_calculate_abs(args):
             if args.setting == "transductive":
                 if corpus == "train":
                     sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                    score_list = generate_graph_inputs_abs(args, sub_graph_dict, graph_strut_dict, abstr)
+                    score_list = generate_graph_inputs_abs(args, sub_graph_dict, graph_strut_dict, introduction[:30])
                 else:
                     sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
                     score_list = generate_graph_inputs_abs(args, sub_graph_dict, graph_strut_dict,
@@ -495,7 +499,7 @@ def format_calculate_abs(args):
             else:
                 if corpus == "train":
                     sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                    score_list = generate_graph_inputs_abs(args, sub_graph_dict, graph[corpus], abstr)
+                    score_list = generate_graph_inputs_abs(args, sub_graph_dict, graph[corpus],introduction[:30])
                 else:
                     sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
                     score_list = generate_graph_inputs_abs(args, sub_graph_dict, graph[corpus],
@@ -567,10 +571,11 @@ def greedy_selection(doc_sent_list, abstract_sent_list, summary_size):
                 cur_max_rouge = rouge_score
                 cur_id = i
         if (cur_id == -1):
-            return selected
+            return selected, cur_max_rouge
         selected.append(cur_id)
         max_rouge = cur_max_rouge
-
+   
+    #print("max:", cur_max_rouge)
     return sorted(selected), max_rouge
 
 def cal_score(doc_sent_list, abstract_sent_list):
@@ -585,7 +590,7 @@ def cal_score(doc_sent_list, abstract_sent_list):
     reference_1grams = _get_word_ngrams(1, [abstract])
     reference_2grams = _get_word_ngrams(2, [abstract])
     evaluate_1grams = _get_word_ngrams(1, [doc_abstract])
-    evaluate_2grams = _get_word_ngrams(2, [doc_abstractt])
+    evaluate_2grams = _get_word_ngrams(2, [doc_abstract])
 
     rouge_1 = cal_rouge( evaluate_1grams, reference_1grams)['f']
     rouge_2 = cal_rouge( evaluate_2grams, reference_2grams)['f']
