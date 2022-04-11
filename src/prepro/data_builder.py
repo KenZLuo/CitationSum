@@ -250,7 +250,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
                 graph_input.append(ea_input)
             assert len(graph_input)==(args.negative_number+1)
             graph_inp.append(graph_input)
-    print(score_list)
+    #print(score_list)
     #print(np.array(score_list).mean())
     return graph_inp, score_list
 
@@ -267,7 +267,7 @@ def generate_graph_inputs_abs(args, graph_struct, graph_strut_dict, abstract):
         for e_input in graph_inputs[1:]:
             r_score = cal_score(e_input, abstract)
             score_list.append(r_score)
-    print(score_list)
+    #print(score_list)
     return score_list
 
 def format_cite(args):
