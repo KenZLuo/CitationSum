@@ -228,28 +228,30 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
         for e_input in graph_inputs[1:]:
             tokenize_graph_input = e_input[:args.max_src_nsents]
             #sent_label, r_score 
-            sent_label, r_score = greedy_selection(tokenize_graph_input, abstract,6)
-            score_list.append(r_score)
-            sent_label_id = list(range(len(tokenize_graph_input)))
-            graph_input = []
-            each_input = []
-            count = 0
-            for i in sent_label:
-                sent_label_id.remove(i)
-                if count < 6:
-                    each_input.append(tokenize_graph_input[i])
-                count += 1
-            graph_input.append(each_input)
+            sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 6)
+            if 0.42 < r_score:
+                score_list.append(r_score)
+                sent_label_all, _ = greedy_selection(tokenize_graph_input, abstract, 20)
+                sent_label_id = list(range(len(tokenize_graph_input)))
+                graph_input = []
+                each_input = []
+                count = 0
+                for i in sent_label_all:
+                    sent_label_id.remove(i)
+                    if count < 6:
+                        each_input.append(tokenize_graph_input[i])
+                    count += 1
+                graph_input.append(each_input)
 
-            for iter in range(args.negative_number):
-            #if 3 < len(sent_label_id):
-                idx = random.sample(sent_label_id, 4)
-                ea_input = []
-                for j in idx:
-                    ea_input.append(tokenize_graph_input[j])
-                graph_input.append(ea_input)
-            assert len(graph_input)==(args.negative_number+1)
-            graph_inp.append(graph_input)
+                for iter in range(args.negative_number):
+                #if 3 < len(sent_label_id):
+                    idx = random.sample(sent_label_id, 6)
+                    ea_input = []
+                    for j in idx:
+                        ea_input.append(tokenize_graph_input[j])
+                    graph_input.append(ea_input)
+                assert len(graph_input)==(args.negative_number+1)
+                graph_inp.append(graph_input)
     #print(score_list)
     #print(np.array(score_list).mean())
     return graph_inp, score_list
