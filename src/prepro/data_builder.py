@@ -211,7 +211,7 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
         g.add_edges(key_nodes, neighbor)
     return g
 
-def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
+def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_inp):
     graph_inputs = []
     for pid in graph_struct:
         graph_i = graph_strut_dict[pid][args.graph_input_type]
@@ -225,11 +225,13 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
     graph_inp=[]
     score_list = []
     if graph_inputs[1:] !=[]:
+        del_count = 0
+        temp = []
         for e_input in graph_inputs[1:]:
             tokenize_graph_input = e_input[:args.max_src_nsents]
             #sent_label, r_score 
             sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 6)
-            if 0.42 < r_score:
+            if 0.45 < r_score:
                 score_list.append(r_score)
                 sent_label_all, _ = greedy_selection(tokenize_graph_input, abstract, 20)
                 sent_label_id = list(range(len(tokenize_graph_input)))
@@ -252,9 +254,14 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict,abstract):
                     graph_input.append(ea_input)
                 assert len(graph_input)==(args.negative_number+1)
                 graph_inp.append(graph_input)
+                temp.append(graph_struct[pid_inp][del_count])
+            else:
+                del graph_struct[graph_struct[pid_inp][del_count]]
+            del_count += 1
+            graph_struct[pid_inp] = temp
     #print(score_list)
     #print(np.array(score_list).mean())
-    return graph_inp, score_list
+    return graph_inp, score_list, graph_struct
 
 def generate_graph_inputs_abs(args, graph_struct, graph_strut_dict, abstract):
     graph_inputs = []
@@ -355,17 +362,17 @@ def format_cite(args):
             if args.setting == "transductive":
                 if corpus == "train":
                     sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                    graph_text, score_list = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[:30])
+                    graph_text, score_list, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[:30], pid)
                 else:
                     sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                    graph_text, score_list = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[:30])
+                    graph_text, score_list, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[:30], pid)
             else:
                 if corpus == "train":
                     sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                    graph_text, score_list = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[:30])
+                    graph_text, score_list, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[:30], pid)
                 else:
                     sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                    graph_text, score_list = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[:30])
+                    graph_text, score_list,sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[:30], pid)
             if score_list != []:
                 scores += score_list
                 #print(score_list)
