@@ -41,7 +41,7 @@ if __name__ == '__main__':
     parser.add_argument("-max_neighbour", default=8, type=int)
     parser.add_argument("-negative_number", default=1, type=int)
     parser.add_argument("-max_pos", default=1024, type=int)
-    parser.add_argument("-max_graph_pos", default=100, type=int)
+    parser.add_argument("-max_graph_pos", default=200, type=int)
     parser.add_argument("-use_interval", type=str2bool, nargs='?',const=True,default=True)
     parser.add_argument("-large", type=str2bool, nargs='?',const=True,default=False)
     parser.add_argument("-load_from_extractive", default='', type=str)

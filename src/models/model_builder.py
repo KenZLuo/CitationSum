@@ -480,6 +480,7 @@ class AbsSummarizer(nn.Module):
         graph_node_features = graph_node_features.permute(0, 2, 1, 3)
         graph_node_features = graph_node_features.reshape(batch_size * negative_num * (nn+1), -1)
         # graph_node_idxes = torch.arange(0, batch_size * (nn+1) * negative_num, nn+1)
+        #print(graph_node_features.shape)
         graph_node_num = [num for num in node_num for _ in range(negative_num)]
         graph_node_idxes = np.cumsum(graph_node_num)
         graph_node_idxes = [torch.zeros_like(graph_node_idxes[0]).long().to(graph_node_features.device)] + graph_node_idxes.tolist()
@@ -498,6 +499,7 @@ class AbsSummarizer(nn.Module):
         neighbor_feat = overall_feat[:, :, 1:, :]
         head_feat = overall_feat[:, :, 0:1, :]
         batch_size = neighbor_feat.size(1)
+        print(head_feat.shape, neighbor_feat.shape)
         #nn = neighbor_feat.size(2)
         # negative_num = self.args.negative_number+1
         neighbor_feat = neighbor_feat.permute(1, 2, 0, 3).reshape(batch_size, neighbor_feat.size(2)* negative_num, -1)

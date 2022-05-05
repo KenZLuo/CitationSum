@@ -198,11 +198,12 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
     assert len(graph_struct) == nodes_num
 
     g.add_nodes(len(graph_struct))
+    #print(graph_struct)
     pid2idx = {}
     for index, key_node in enumerate(graph_struct):
         pid2idx[key_node] = index
     assert pid2idx[paper_id] == 0
-
+    #print(pid2idx)
     for index, key_node in enumerate(graph_struct):
         neighbor = [pid2idx[node] for node in graph_struct[key_node]]
         # add self loop
@@ -213,25 +214,32 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
 
 def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_inp):
     graph_inputs = []
+    temp_neigh = []
     for pid in graph_struct:
+        if pid != pid_inp:
+            temp_neigh.append(pid)
+    graph_struct[pid_inp]=temp_neigh
+    for pid in graph_struct[pid_inp]:
         graph_i = graph_strut_dict[pid][args.graph_input_type]
         graph_input = []
         for sub in graph_i:
             for each_sent in sub:
                 graph_input.append(each_sent.split())
         #graph_input = clean(graph_input)
+
+        #sent_label, r_score = greedy_selection(tokenize_graph_input, abstract,6)
         graph_inputs.append(graph_input)
 
     graph_inp=[]
     score_list = []
-    if graph_inputs[1:] !=[]:
+    if graph_inputs !=[]:
         del_count = 0
         temp = []
-        for e_input in graph_inputs[1:]:
+        for e_input in graph_inputs:
             tokenize_graph_input = e_input[:args.max_src_nsents]
             #sent_label, r_score 
             sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 6)
-            if 0.45 < r_score:
+            if 0.65 < r_score:
                 score_list.append(r_score)
                 sent_label_all, _ = greedy_selection(tokenize_graph_input, abstract, 20)
                 sent_label_id = list(range(len(tokenize_graph_input)))
@@ -256,9 +264,14 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
                 graph_inp.append(graph_input)
                 temp.append(graph_struct[pid_inp][del_count])
             else:
+                #print(graph_struct)
+                #print('neigh:', graph_struct[pid_inp][del_count])
+                for neigh in graph_struct[graph_struct[pid_inp][del_count]]:
+                    if neigh != pid_inp:
+                        graph_struct[neigh].remove(graph_struct[pid_inp][del_count])
                 del graph_struct[graph_struct[pid_inp][del_count]]
             del_count += 1
-            graph_struct[pid_inp] = temp
+        graph_struct[pid_inp] = temp
     #print(score_list)
     #print(np.array(score_list).mean())
     return graph_inp, score_list, graph_struct
