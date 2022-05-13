@@ -223,9 +223,13 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
     for pid in graph_struct[pid_inp]:
         graph_i = graph_strut_dict[pid]["full_text"]
         graph_input = []
-        for sub in graph_i:
-            for each_sent in sub:
-                graph_input.append(each_sent.split())
+
+        #for sub in graph_i:
+        #    for each_sent in sub:
+        #        graph_input.append(each_sent.split())
+        for sub in graph_i.split('.'):
+            if sub:
+                graph_input.append((sub + " .").split())
         #graph_input = clean(graph_input)
 
         #sent_label, r_score = greedy_selection(tokenize_graph_input, abstract,6)
