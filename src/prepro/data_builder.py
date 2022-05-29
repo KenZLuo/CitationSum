@@ -221,15 +221,16 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
             temp_neigh.append(pid)
     graph_struct[pid_inp]=temp_neigh
     for pid in graph_struct[pid_inp]:
-        graph_i = graph_strut_dict[pid]["full_text"]
+        graph_i = graph_strut_dict[pid]["introduction"]
+        #print(graph_i)
         graph_input = []
 
-        #for sub in graph_i:
-        #    for each_sent in sub:
-        #        graph_input.append(each_sent.split())
-        for sub in graph_i.split('.'):
-            if sub:
-                graph_input.append((sub + " .").split())
+        for sub in graph_i:
+            for each_sent in sub:
+                graph_input.append(each_sent.split())
+        #for sub in graph_i.split('.'):
+        #    if sub:
+        #        graph_input.append((sub + " .").split())
         #graph_input = clean(graph_input)
 
         #sent_label, r_score = greedy_selection(tokenize_graph_input, abstract,6)
@@ -244,8 +245,12 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
             tokenize_graph_input = e_input[:args.max_src_nsents]
             #sent_label, r_score 
             sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 6)
-            if 0.6 < r_score:
+            if 0.4 < r_score:
+                #print("selected:", [' '.join(e_input[each_label]) for each_label in sent_label])    
+                #print("full:", [' '.join(each_input) for each_input in tokenize_graph_input])
+                print(r_score)
                 score_list.append(r_score)
+                break
                 sent_label_all, _ = greedy_selection(tokenize_graph_input, abstract, 20)
                 sent_label_id = list(range(len(tokenize_graph_input)))
                 graph_input = []
@@ -259,7 +264,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
                 graph_input.append(each_input)
 
                 for iter in range(args.negative_number):
-                #if 3 < len(sent_label_id):
+                    #if len(sent_label_id)
                     idx = random.sample(sent_label_id, 6)
                     ea_input = []
                     for j in idx:
@@ -284,7 +289,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
 def generate_graph_inputs_abs(args, graph_struct, graph_strut_dict, abstract):
     graph_inputs = []
     for pid in graph_struct:
-        graph_i = graph_strut_dict[pid][args.graph_input_type]
+        graph_i = graph_strut_dict[pid]['introduction']
         #abs_list = graph_i.split(".")
         #abstr = [(each_s + " .").split() for each_s in abs_list if each_s]
         #graph_inputs.append(abstr)
@@ -300,7 +305,8 @@ def generate_graph_inputs_abs(args, graph_struct, graph_strut_dict, abstract):
     score_list_2 = []
     if graph_inputs[1:] !=[]:
         for e_input in graph_inputs[1:]:
-            r_score_1, r_score_2 = cal_score(e_input[:30], abstract)
+            r_score_1, r_score_2 = cal_score(e_input, abstract)
+            print("score absr:", r_score_1, [' '.join(estr) for estr in e_input])
             score_list_1.append(r_score_1)
             score_list_2.append(r_score_2)
     #print(score_list)
@@ -315,7 +321,7 @@ def format_cite(args):
     if args.setting == "transductive":
         graph_strut_dict = {}
         for dir in dirs:
-            source_txt_file = os.path.join(root_data_dir, '{}.jsonl'.format(dir))
+            source_txt_file = os.path.join(root_data_dir, '{}_updated.jsonl'.format(dir))
             #df = pd.read_json(path_or_buf=source_txt_file, lines=True)
             
             with open(source_txt_file, 'r') as f:
@@ -323,16 +329,16 @@ def format_cite(args):
             
             for ins in json_main:
                 ins = json.loads(ins)
-                graph_strut_dict[ins["pmid"]] = ins
+                graph_strut_dict[ins["paper_id"]] = ins
     else:
         graph_train_dict = {}
         graph_val_dict = {}
         graph_test_dict = {}
 
 
-        test_path = os.path.join(root_data_dir, 'test.jsonl')
-        val_path = os.path.join(root_data_dir, 'val.jsonl')
-        train_path = os.path.join(root_data_dir, 'train.jsonl')
+        test_path = os.path.join(root_data_dir, 'test_updated.jsonl')
+        val_path = os.path.join(root_data_dir, 'val_updated.jsonl')
+        train_path = os.path.join(root_data_dir, 'train_updated.jsonl')
 
         #train_df = pd.read_json(path_or_buf=train_path, lines=True)
         #val_df = pd.read_json(path_or_buf=val_path, lines=True)
@@ -349,15 +355,15 @@ def format_cite(args):
         
         for ins in train_json_main:
             ins = json.loads(ins)
-            graph_train_dict[ins["pmid"]] = ins
+            graph_train_dict[ins["paper_id"]] = ins
 
         for ins in val_json_main:
             ins = json.loads(ins)
-            graph_val_dict[ins["pmid"]] = ins
+            graph_val_dict[ins["paper_id"]] = ins
 
         for ins in test_json_main:
             ins = json.loads(ins)
-            graph_test_dict[ins["pmid"]] = ins
+            graph_test_dict[ins["paper_id"]] = ins
 
         graph = {'train': graph_train_dict, 'val': graph_val_dict, 'test': graph_test_dict}
 
@@ -367,32 +373,32 @@ def format_cite(args):
     abs_scores = []
     for corpus in dirs:
         data_lst = []
-        source_txt_file = os.path.join(root_data_dir, '{}.jsonl'.format(corpus))
+        source_txt_file = os.path.join(root_data_dir, '{}_updated.jsonl'.format(corpus))
         #df = pd.read_json(path_or_buf=source_txt_file, lines=True)
 
         with open(source_txt_file, 'r') as f:
             json_main = list(f)
 
         #for row in tqdm(json_main):
-        for row in tqdm(json_main):
+        for row in json_main:
             row = json.loads(row)
-            pid = row['pmid']
+            pid = row['paper_id']
             #print(pid)
             introduction = []
             #print(row['full_text'].split('.'))
             #introduction = row['full_text'].split(.)
-            for sub in row['full_text'].split('.'):
-                if sub:
-                    introduction.append((sub+" .").split())
-                #for each_s in sub:
-                    #introduction.append(each_s.split())
+            for sub in row['introduction']:
+                #if sub:
+                 #   introduction.append((sub+" .").split())
+                for each_s in sub:
+                    introduction.append(each_s.split())
             # introduction = [j for sub in row['introduction'] for j in sub]
             #print(introduction)
             abstract = row['abstract']
-            #print(abstract)
+            #print("abs:", abstract)
             abs_list = abstract.split(".")
             abstr = [(each_s+" .").split() for each_s in abs_list if each_s]
-            #print(abstr)
+            #print("abs:", abstr)
             #break
             if args.setting == "transductive":
                 if corpus == "train":
@@ -414,9 +420,9 @@ def format_cite(args):
                 #print(score_list)
 
             node_num = len(graph_text) + 1
-            data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, node_num, args))
-        #print(np.array(scores).mean())
-        #break
+            #data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, node_num, args))
+        print(np.array(scores).mean())
+        break
         data_dict[corpus] = data_lst
 
     for d in dirs:
@@ -543,6 +549,7 @@ def format_calculate_abs(args):
                     sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
                     score_list_1, score_list_2 = generate_graph_inputs_abs(args, sub_graph_dict, graph_strut_dict, abstr)
             else:
+                print("abstr:", abstract)
                 if corpus == "train":
                     sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
                     score_list_1, score_list_2 = generate_graph_inputs_abs(args, sub_graph_dict, graph[corpus], abstr)
