@@ -216,14 +216,14 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
 def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_inp):
     graph_inputs = []
     temp_neigh = []
-    all_pid = graph_strut_dict.key()
+    all_pid = list(graph_strut_dict.keys())
     for pid in graph_struct:
         if pid != pid_inp:
             temp_neigh.append(pid)
             all_pid.remove(pid)
     graph_struct[pid_inp]=temp_neigh
     sample_list = list(range(len(all_pid)))
-    rs = random.sample(sample_list, arg.negative_number)
+    rs = random.sample(sample_list, args.negative_number)
     neg_pid = [all_pid[i] for i in rs]
 
     for pid in graph_struct[pid_inp]:
@@ -250,7 +250,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
             tokenize_graph_input = e_input[:args.max_src_nsents]
             #sent_label, r_score 
             sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 8)
-            if 0.65 < r_score:
+            if 0.4 < r_score:
                 each_input = []
                 for i in sent_label:
                     each_input.append(tokenize_graph_input[i])
@@ -548,6 +548,7 @@ def _format_cite(params):
     bert = BertCiteData(args)
     sent_labels, _ = greedy_selection(introduce[:args.max_src_nsents], abstract, 6)
     graph = generate_dgl_graph(pid, sub_graph_dict, node_num)
+    #print(graph.nodes(),graph.edges())
     b_data = bert.preprocess(introduce, abstract, sent_labels, graph_text, neg_graph_text, graph, use_bert_basic_tokenizer=args.use_bert_basic_tokenizer,
                              is_test=is_test)
     return b_data
@@ -746,7 +747,7 @@ class BertCiteData():
         src_txt = [' '.join(sent) for sent in src]
         text = ' {} {} '.format(self.sep_token, self.cls_token).join(src_txt)
         graph_subtoken_idxs = []
-        neg_graph_subtoken_idxs
+        neg_graph_subtoken_idxs=[]
         if graph_src != []:
             for each_graph_srcs in graph_src:
                 subtoken_idxs = []
