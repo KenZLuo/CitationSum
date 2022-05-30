@@ -22,43 +22,28 @@ class Batch(object):
         graph_input_len = []
         node_num = []
         max_node_num = max([len(graph_input) for graph_input in graph_inputs])
-        #input_len = []
-        #for graph_input in graph_inputs:
-        #    for each_input in graph_input:
-        #        for input in each_input:
-        #            input_len.append(len(input))
-        #max_len = max(input_len)
-        #max_len = min([max_len, given_max_len])
         if max_node_num ==0:
             return torch.empty(len(graph_inputs),1),torch.zeros(len(graph_inputs),1),torch.ones(len(graph_inputs),1)
         # Here we pad each graph with max node number and pad each src with max length. Note we put positive
         # sample and negative samples of the same node together.
-        sample_number = max([len(sample) for node_samples in graph_inputs for sample in node_samples])
-        # Batch_size x node_num x sample_num x token_num
         # Notice that node num and token num is not the same in each graph
         # rtn_data max_node_num x sample_num x max_token_num
         # each_input_len node_num x sample_num x 1
 
         for graph_input in graph_inputs:
-            rtn_data = []
-            each_input_len = []
+            e_rtn_data = []
+            e_input_len = []
             for i in range(max_node_num):
-                e_rtn_data = []
-                e_input_len = []
                 if i < len(graph_input):
-                    for each_input in graph_input[i]:
-                        e_rtn_data.append(each_input + [pad_id] * (max_len - len(each_input)))
-                        e_input_len.append(len(each_input))
+                    e_rtn_data.append(graph_input[i] + [pad_id] * (max_len - len(graph_input)))
+                    e_input_len.append(len(graph_input[i]))
                 else:
                     #print(graph_input)
-                    for j in range(sample_number):
-                        e_rtn_data.append([pad_id] *max_len)
-                        e_input_len.append(0)
-                rtn_data.append(e_rtn_data)
-                each_input_len.append(e_input_len)
+                    e_rtn_data.append([pad_id] *max_len)
+                    e_input_len.append(0)
             #rtn_data = [g + [pad_id] * (max_len - len(g)) for g in graph_input]
-            pad_graph_inputs.append(rtn_data)
-            graph_input_len.append(each_input_len)
+            pad_graph_inputs.append(e_rtn_data)
+            graph_input_len.append(e_input_len)
             node_num.append(len(graph_input)+1)
         #print(pad_graph_inputs)
         #print(graph_input_len)
@@ -74,12 +59,13 @@ class Batch(object):
             pre_clss = [x[3] for x in data]
             pre_src_sent_labels = [x[4] for x in data]
             pre_graph_src = [x[5] for x in data]
-            pre_graph = [x[6] for x in data]
+            pre_neg_graph_src = [x[6] for x in data]
+            pre_graph = [x[7] for x in data]
 
             src = torch.tensor(self._pad(pre_src, 0))
             tgt = torch.tensor(self._pad(pre_tgt, 0))
             graph_src, graph_src_len, node_num = self._pad_graph_inputs(pre_graph_src, 0, args.max_graph_pos)
-
+            neg_graph_src, neg_graph_src_len, neg_node_num = self._pad_graph_inputs(pre_neg_graph_src, 0, args.max_graph_pos)
            # print(len(graph_src))
             segs = torch.tensor(self._pad(pre_segs, 0))
             mask_src = ~(src == 0)
@@ -101,10 +87,13 @@ class Batch(object):
             setattr(self, 'mask_src', mask_src.to(device))
             #setattr(self, 'graph_src', mask_tgt.to(device))
             setattr(self, 'graph_src', graph_src.to(device))
+            setattr(self, 'neg_graph_src', neg_graph_src.to(device))
             setattr(self, 'mask_tgt', mask_tgt.to(device))
             setattr(self, 'graph_src_len', graph_src_len.to(device))
+            setattr(self, 'neg_graph_src_len', neg_graph_src_len.to(device))
             setattr(self, 'graph', pre_graph)
             setattr(self, 'node_num', node_num.to(device))
+            setattr(self, 'neg_node_num', neg_node_num.to(device))
             if (is_test):
                 src_str = [x[-2] for x in data]
                 setattr(self, 'src_str', src_str)
@@ -242,11 +231,6 @@ class DataIterator(object):
         xs = self.dataset
         return xs
 
-
-
-
-
-
     def preprocess(self, ex, is_test):
         src = ex['src']
         tgt = ex['tgt'][:self.args.max_tgt_len][:-1]+[2]
@@ -258,6 +242,7 @@ class DataIterator(object):
         src_txt = ex['src_txt']
         tgt_txt = ex['tgt_txt']
         graph_src = ex['graph_src']
+        neg_graph_src = ex['neg_graph_src']
         graph = ex['graph']
         end_id = [src[-1]]
         src = src[:-1][:self.args.max_pos - 1] + end_id
@@ -277,18 +262,28 @@ class DataIterator(object):
                 each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in s]
             graph_src_max.append(each_src)
 
+        neg_graph_src_max = []
+        for s in neg_graph_src:
+            # new_s = []
+            # new_s.append(s[0]+s[1]+s[2])
+            # new_s.append(s[3])
+            # new_s.append(s[4])
+            if s == []:
+                each_src = s
+            else:
+                each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in s]
+            neg_graph_src_max.append(each_src)
+
         #graph_src = [s[:-1][:self.args.max_graph_pos - 1] + end_id for s in graph_src]
         max_sent_id = bisect.bisect_left(clss, self.args.max_pos)
         src_sent_labels = src_sent_labels[:max_sent_id]
         clss = clss[:max_sent_id]
         # src_txt = src_txt[:max_sent_id]
 
-
-
         if(is_test):
-            return src, tgt, segs, clss, src_sent_labels, graph_src_max, graph, src_txt, tgt_txt
+            return src, tgt, segs, clss, src_sent_labels, graph_src_max, neg_graph_src_max, graph, src_txt, tgt_txt
         else:
-            return src, tgt, segs, clss, src_sent_labels, graph_src_max, graph
+            return src, tgt, segs, clss, src_sent_labels, graph_src_max, neg_graph_src_max, graph
 
     def batch_buffer(self, data, batch_size):
         minibatch, size_so_far = [], 0

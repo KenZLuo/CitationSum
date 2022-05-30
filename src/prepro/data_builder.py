@@ -216,62 +216,46 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
 def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_inp):
     graph_inputs = []
     temp_neigh = []
+    all_pid = graph_strut_dict.key()
     for pid in graph_struct:
         if pid != pid_inp:
             temp_neigh.append(pid)
+            all_pid.remove(pid)
     graph_struct[pid_inp]=temp_neigh
+    sample_list = list(range(len(all_pid)))
+    rs = random.sample(sample_list, arg.negative_number)
+    neg_pid = [all_pid[i] for i in rs]
+
     for pid in graph_struct[pid_inp]:
         graph_i = graph_strut_dict[pid]["introduction"]
         #print(graph_i)
         graph_input = []
-
         for sub in graph_i:
             for each_sent in sub:
                 graph_input.append(each_sent.split())
-        #for sub in graph_i.split('.'):
-        #    if sub:
-        #        graph_input.append((sub + " .").split())
-        #graph_input = clean(graph_input)
-
-        #sent_label, r_score = greedy_selection(tokenize_graph_input, abstract,6)
         graph_inputs.append(graph_input)
 
-    graph_inp=[]
-    score_list = []
+    graph_inp = []
+    neg_graph_inputs = []
     if graph_inputs !=[]:
+        for pid in neg_pid:
+            graph_i = graph_strut_dict[pid]["abstract"]
+            abs_list = graph_i.split(".")
+            abstr = [(each_s + " .").split() for each_s in abs_list if each_s]
+            neg_graph_inputs.append(abstr)
+
         del_count = 0
         temp = []
         for e_input in graph_inputs:
             tokenize_graph_input = e_input[:args.max_src_nsents]
             #sent_label, r_score 
-            sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 6)
-            if 0.4 < r_score:
-                #print("selected:", [' '.join(e_input[each_label]) for each_label in sent_label])    
-                #print("full:", [' '.join(each_input) for each_input in tokenize_graph_input])
-                print(r_score)
-                score_list.append(r_score)
-                break
-                sent_label_all, _ = greedy_selection(tokenize_graph_input, abstract, 20)
-                sent_label_id = list(range(len(tokenize_graph_input)))
-                graph_input = []
+            sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 8)
+            if 0.65 < r_score:
                 each_input = []
-                count = 0
-                for i in sent_label_all:
-                    sent_label_id.remove(i)
-                    if count < 6:
-                        each_input.append(tokenize_graph_input[i])
-                    count += 1
-                graph_input.append(each_input)
-
-                for iter in range(args.negative_number):
-                    #if len(sent_label_id)
-                    idx = random.sample(sent_label_id, 6)
-                    ea_input = []
-                    for j in idx:
-                        ea_input.append(tokenize_graph_input[j])
-                    graph_input.append(ea_input)
-                assert len(graph_input)==(args.negative_number+1)
-                graph_inp.append(graph_input)
+                for i in sent_label:
+                    each_input.append(tokenize_graph_input[i])
+                #graph_input.append(each_input)
+                graph_inp.append(each_input)
                 temp.append(graph_struct[pid_inp][del_count])
             else:
                 #print(graph_struct)
@@ -284,7 +268,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
         graph_struct[pid_inp] = temp
     #print(score_list)
     #print(np.array(score_list).mean())
-    return graph_inp, score_list, graph_struct
+    return graph_inp, neg_graph_inputs, graph_struct
 
 def generate_graph_inputs_abs(args, graph_struct, graph_strut_dict, abstract):
     graph_inputs = []
@@ -403,26 +387,20 @@ def format_cite(args):
             if args.setting == "transductive":
                 if corpus == "train":
                     sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                    graph_text, score_list, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[:30], pid)
+                    graph_text, neg_graph_text, sub_graph_dict = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[10:40], pid)
                 else:
                     sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                    graph_text, score_list, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[:30], pid)
+                    graph_text, neg_graph_text, sub_graph_dict = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[10:40], pid)
             else:
                 if corpus == "train":
                     sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                    graph_text, score_list, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[:30], pid)
+                    graph_text, neg_graph_text, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[10:40], pid)
                 else:
                     sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                    graph_text, score_list,sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[:30], pid)
-            
-            if score_list != []:
-                scores += score_list
-                #print(score_list)
+                    graph_text, neg_graph_text, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[10:40], pid)
 
             node_num = len(graph_text) + 1
-            #data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, node_num, args))
-        print(np.array(scores).mean())
-        break
+            data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, neg_graph_text, node_num, args))
         data_dict[corpus] = data_lst
 
     for d in dirs:
@@ -434,14 +412,16 @@ def format_cite(args):
             with tqdm(total=args.shard_size) as spbar:
                 for i, data in enumerate(pool.imap(_format_cite, a_lst)):
                     if data:
-                        src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt, graph_subtoken_idxs, graph = data
+                        src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt, \
+                        graph_subtoken_idxs, neg_graph_subtoken_idxs, graph = data
                         
                         #print("graph_idxs:", graph_subtoken_idxs)
                         #print("graph:", graph)
                         #print("len:", len(graph_subtoken_idxs))
                         b_data_dict = {"src": src_subtoken_idxs, "tgt": tgt_subtoken_idxs,
                                        "src_sent_labels": sent_labels, "segs": segments_ids, 'clss': cls_ids,
-                                       'src_txt': src_txt, "tgt_txt": tgt_txt, 'graph_src':graph_subtoken_idxs, "graph": graph}
+                                       'src_txt': src_txt, "tgt_txt": tgt_txt, 'graph_src':graph_subtoken_idxs,
+                                       'neg_graph_src':neg_graph_subtoken_idxs, "graph": graph}
                         dataset.append(b_data_dict)
                     spbar.update()
                     if (len(dataset) > args.shard_size):
@@ -563,12 +543,12 @@ def format_calculate_abs(args):
         print(np.array(scores_1).mean(), np.array(scores_2).mean())
 
 def _format_cite(params):
-    corpus_type, pid, abstract, introduce, sub_graph_dict, graph_text, node_num, args = params
+    corpus_type, pid, abstract, introduce, sub_graph_dict, graph_text, neg_graph_text, node_num, args = params
     is_test = corpus_type == 'test'
     bert = BertCiteData(args)
-    sent_labels, _ = greedy_selection(introduce[:args.max_src_nsents], abstract, 3)
+    sent_labels, _ = greedy_selection(introduce[:args.max_src_nsents], abstract, 6)
     graph = generate_dgl_graph(pid, sub_graph_dict, node_num)
-    b_data = bert.preprocess(introduce, abstract, sent_labels, graph_text, graph, use_bert_basic_tokenizer=args.use_bert_basic_tokenizer,
+    b_data = bert.preprocess(introduce, abstract, sent_labels, graph_text, neg_graph_text, graph, use_bert_basic_tokenizer=args.use_bert_basic_tokenizer,
                              is_test=is_test)
     return b_data
 
@@ -741,7 +721,7 @@ class BertCiteData():
         self.cls_vid = tokenizer.vocab[self.cls_token]
         self.pad_vid = tokenizer.vocab[self.pad_token]
 
-    def preprocess(self, src, tgt, sent_labels, graph_src, graph, use_bert_basic_tokenizer=False, is_test=False):
+    def preprocess(self, src, tgt, sent_labels, graph_src, neg_graph_src, graph, use_bert_basic_tokenizer=False, is_test=False):
 
         if ((not is_test) and len(src) == 0):
             return None
@@ -766,6 +746,7 @@ class BertCiteData():
         src_txt = [' '.join(sent) for sent in src]
         text = ' {} {} '.format(self.sep_token, self.cls_token).join(src_txt)
         graph_subtoken_idxs = []
+        neg_graph_subtoken_idxs
         if graph_src != []:
             for each_graph_srcs in graph_src:
                 subtoken_idxs = []
@@ -777,6 +758,17 @@ class BertCiteData():
                     each_graph_subtoken_idxs = tokenizer.convert_tokens_to_ids(each_graph_src_subtokens)
                     subtoken_idxs.append(each_graph_subtoken_idxs)
                 graph_subtoken_idxs.append(subtoken_idxs)
+
+            for each_graph_srcs in neg_graph_src:
+                subtoken_idxs = []
+                for each_graph_src in each_graph_srcs:
+                    each_src = [' '.join(sent) for sent in each_graph_src]
+                    each_text = ' {} {} '.format(self.sep_token, self.cls_token).join(each_src)
+                    each_graph_src_subtokens = tokenizer.tokenize(each_text)
+                    each_graph_src_subtokens = [self.cls_token] + each_graph_src_subtokens + [self.sep_token]
+                    each_graph_subtoken_idxs = tokenizer.convert_tokens_to_ids(each_graph_src_subtokens)
+                    subtoken_idxs.append(each_graph_subtoken_idxs)
+                neg_graph_subtoken_idxs.append(subtoken_idxs)
 
         #print(graph_subtoken_idxs)
         src_subtokens = tokenizer.tokenize(text)
@@ -804,7 +796,7 @@ class BertCiteData():
         tgt_txt = '<q>'.join([' '.join(tt) for tt in tgt])
         src_txt = [original_src_txt[i] for i in idxs]
 
-        return src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt, graph_subtoken_idxs, graph
+        return src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt, graph_subtoken_idxs, neg_graph_subtoken_idxs, graph
 
 def format_to_bert(args):
     if (args.dataset != ''):

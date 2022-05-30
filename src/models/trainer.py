@@ -228,13 +228,18 @@ class Trainer(object):
             #mask_tgt = batch.mask_tgt
             #mask_cls = batch.mask_cls
             graph_src = batch.graph_src
+            neg_graph_src = batch.neg_graph_src
             graph = batch.graph
             graph_len = batch.graph_src_len
             node_num = batch.node_num
+            neg_graph_len = batch.neg_graph_src_len
+            neg_node_num = batch.neg_node_num
             #print(mask_src)
-            outputs, scores, doc_word_cos_sim, cos_sim = self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
-            batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization, mask_src, node_num, cos_sim, doc_word_cos_sim)
-
+            outputs, scores, doc_word_cos_sim, cos_sim = self.model\
+                (src, tgt, mask_src, graph_src, graph, graph_len, node_num, neg_graph_src, neg_graph_len, neg_node_num)
+            batch_stats = self.loss.sharded_compute_loss(batch,
+                                                         outputs, self.args.generator_shard_size, normalization, mask_src,
+                                                         node_num, cos_sim, doc_word_cos_sim)
             try:
                 if batch_stats.contra_loss != 0.0:
                     wandb.log({"loss": batch_stats.loss, "contra_loss": batch_stats.contra_loss, "doc_word_contra_loss": batch_stats.doc_word_contra_loss})
