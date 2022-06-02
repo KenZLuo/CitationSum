@@ -225,6 +225,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
     sample_list = list(range(len(all_pid)))
     rs = random.sample(sample_list, args.negative_number)
     neg_pid = [all_pid[i] for i in rs]
+    #print(neg_pid)
 
     for pid in graph_struct[pid_inp]:
         graph_i = graph_strut_dict[pid]["introduction"]
@@ -233,6 +234,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
         for sub in graph_i:
             for each_sent in sub:
                 graph_input.append(each_sent.split())
+            #print(graph_input)
         graph_inputs.append(graph_input)
 
     graph_inp = []
@@ -242,6 +244,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
             graph_i = graph_strut_dict[pid]["abstract"]
             abs_list = graph_i.split(".")
             abstr = [(each_s + " .").split() for each_s in abs_list if each_s]
+            #print(abstr)
             neg_graph_inputs.append(abstr)
 
         del_count = 0
@@ -250,7 +253,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
             tokenize_graph_input = e_input[:args.max_src_nsents]
             #sent_label, r_score 
             sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 8)
-            if 0.4 < r_score:
+            if 0.65 < r_score:
                 each_input = []
                 for i in sent_label:
                     each_input.append(tokenize_graph_input[i])
