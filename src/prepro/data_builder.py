@@ -3,6 +3,7 @@ import glob
 from  tqdm import tqdm
 import hashlib
 import numpy as np
+import scipy.sparse as sp
 import itertools
 import json
 import os
@@ -11,7 +12,7 @@ import re
 import pandas as pd
 import time
 import dgl
-from scipy import sparse
+#from scipy import sparse
 import subprocess
 from collections import Counter, deque
 from os.path import join as pjoin
@@ -226,6 +227,7 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
         g.add_edges(key_nodes, neighbor)
     adj = g.adjacency_matrix_scipy(return_edge_ids=False).astype(float)
     adj= preprocess_adj(adj)
+    #print(adj)
     #print(g)
     return adj.todense()
 
@@ -269,7 +271,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
             tokenize_graph_input = e_input[:args.max_src_nsents]
             #sent_label, r_score 
             sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 8)
-            if 0.65 < r_score:
+            if 0.7 < r_score:
                 each_input = []
                 for i in sent_label:
                     each_input.append(tokenize_graph_input[i])
