@@ -207,8 +207,7 @@ def _k_hop_neighbor(paper_id, n_hop, max_neighbor, graph_strut_dict):
 
     return sub_graph
 
-
-def generate_dgl_graph(paper_id, graph_struct, nodes_num):
+def generate_dgl_graph(args, paper_id, graph_struct, nodes_num):
     g = dgl.DGLGraph()
     assert len(graph_struct) == nodes_num
 
@@ -226,10 +225,12 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
         key_nodes = [index] * len(neighbor)
         g.add_edges(key_nodes, neighbor)
     adj = g.adjacency_matrix_scipy(return_edge_ids=False).astype(float)
-    adj= preprocess_adj(adj)
+    adj= preprocess_adj(adj).todense()
     #print(adj)
     #print(g)
-    return adj.todense()
+    adj = np.concatenate((adj, np.zeros(args.negative_number,nodes_num)), axis=0)
+    adj = np.concatenate((adj, np.zeros(args.negative_number, adj.shape(0))), axis=1)
+    return adj
 
 def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_inp):
     graph_inputs = []
@@ -568,7 +569,7 @@ def _format_cite(params):
     is_test = corpus_type == 'test'
     bert = BertCiteData(args)
     sent_labels, _ = greedy_selection(introduce[:args.max_src_nsents], abstract, 6)
-    graph = generate_dgl_graph(pid, sub_graph_dict, node_num)
+    graph = generate_dgl_graph(args, pid, sub_graph_dict, node_num)
     #print(graph.nodes(),graph.edges())
     b_data = bert.preprocess(introduce, abstract, sent_labels, graph_text, neg_graph_text, graph, use_bert_basic_tokenizer=args.use_bert_basic_tokenizer,
                              is_test=is_test)

@@ -4,7 +4,7 @@ import glob
 import random
 
 import torch
-
+import numpy as np
 from others.logging import logger
 
 
@@ -49,6 +49,21 @@ class Batch(object):
         #print(graph_input_len)
         return torch.tensor(pad_graph_inputs), torch.tensor(graph_input_len), torch.tensor(node_num)
 
+    def _pad_graph(self, graph_inputs):
+        #print(max_len)
+        pad_graph_inputs = []
+        graph_input_len = []
+        node_num = []
+        max_node_num = max([graph_input.shape(0) for graph_input in graph_inputs])
+        graph = []
+        for graph_input in graph_inputs:
+            pad_arr_row = np.zeros(max_node_num-graph_input.shape(0), graph_input.shape(0))
+            each_graph = np.concatenate((graph_input, pad_arr_row), axis=0)
+            pad_arr_col = np.zeros(max_node_num - graph_input.shape(1), graph_input.shape(0))
+            each_graph = np.concatenate((each_graph, pad_arr_col), axis=1)
+            graph.append(each_graph)
+        return graph
+
     def __init__(self, args, data=None, device=None, is_test=False):
         """Create a Batch from a list of examples."""
         if data is not None:
@@ -66,6 +81,7 @@ class Batch(object):
             tgt = torch.tensor(self._pad(pre_tgt, 0))
             graph_src, graph_src_len, node_num = self._pad_graph_inputs(pre_graph_src, 0, args.max_graph_pos)
             neg_graph_src, neg_graph_src_len, neg_node_num = self._pad_graph_inputs(pre_neg_graph_src, 0, args.max_graph_pos)
+            graph = torch.tensor(self._pad_graph(pre_graph))
            # print(len(graph_src))
             segs = torch.tensor(self._pad(pre_segs, 0))
             mask_src = ~(src == 0)
@@ -91,7 +107,7 @@ class Batch(object):
             setattr(self, 'mask_tgt', mask_tgt.to(device))
             setattr(self, 'graph_src_len', graph_src_len.to(device))
             setattr(self, 'neg_graph_src_len', neg_graph_src_len.to(device))
-            setattr(self, 'graph', pre_graph)
+            setattr(self, 'graph', graph.to(device))
             setattr(self, 'node_num', node_num.to(device))
             setattr(self, 'neg_node_num', neg_node_num.to(device))
             if (is_test):

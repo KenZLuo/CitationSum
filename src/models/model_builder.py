@@ -407,7 +407,7 @@ class AbsSummarizer(nn.Module):
 
         return node_feature.unsqueeze(1)
 
-    def forward(self, src, tgt, mask_src, graph_src, graph, graph_len, node_num, neg_graph_src, neg_graph_len):
+    def forward(self, src, tgt, mask_src, graph_src, graph_len, node_num, neg_graph_src, neg_graph_len):
         srcs = src.split(100)
         mask_srcs = mask_src.split(100)
         encoder_outputs, h_cnode_batch = None, None
@@ -483,42 +483,14 @@ class AbsSummarizer(nn.Module):
 
         graph_features = torch.cat([graph_features, neg_graph_features], dim=1)
 
+
         # graph_features = graph_features.reshape((nn+1)*negative_num, batch_size, -1)
         # (node_num x negative_num) x batch_size x hidden_size
         norm_graph_features = graph_features / (graph_features.norm(dim=-1)[:, :, None])
+        doc_cos_sim = torch.bmm(norm_graph_features, norm_graph_features.permute(0, 2, 1))
+
         norm_encoder_outputs = encoder_outputs / (encoder_outputs.norm(dim=-1)[:, :, None])
         doc_word_cos_sim = torch.bmm(norm_encoder_outputs, norm_graph_features.permute(0, 2, 1))
-
-        negative_graphs = [g for g in graph for _ in range(negative_num)]
-        graph_node_features = graph_features.reshape(batch_size, nn+1, negative_num, -1)
-        graph_node_features = graph_node_features.permute(0, 2, 1, 3)
-        graph_node_features = graph_node_features.reshape(batch_size * negative_num * (nn+1), -1)
-        # graph_node_idxes = torch.arange(0, batch_size * (nn+1) * negative_num, nn+1)
-        #print(graph_node_features.shape)
-        graph_node_num = [num for num in node_num for _ in range(negative_num)]
-        graph_node_idxes = np.cumsum(graph_node_num)
-        graph_node_idxes = [torch.zeros_like(graph_node_idxes[0]).long().to(graph_node_features.device)] + graph_node_idxes.tolist()
-        mask_indexes = []
-        start = 0
-        for num in graph_node_num:
-            mask_indexes.extend([index + start for index in range(num)])
-            start += nn + 1
-        graph_node_features = graph_node_features[mask_indexes, :]
-        graph_neighbor_features, graph_nodes_src = self.gnnEncoder(negative_graphs, graph_node_features, graph_node_idxes, graph_node_num)
-        #print(graph_nodes_src.shape)
-
-        overall_feat = graph_neighbor_features.reshape(negative_num, batch_size, nn+1, -1)
-        # overall_feat = torch.stack(all_neighbor_feat) # (negative_num + 1) * batch_size * node_num * hidden_num
-        overall_feat = overall_feat / (overall_feat.norm(dim=-1)[:, :, :, None]+1e-8)
-        neighbor_feat = overall_feat[:, :, 1:, :]
-        head_feat = overall_feat[:, :, 0:1, :]
-        batch_size = neighbor_feat.size(1)
-        print(head_feat.shape, neighbor_feat.shape)
-        #nn = neighbor_feat.size(2)
-        # negative_num = self.args.negative_number+1
-        neighbor_feat = neighbor_feat.permute(1, 2, 0, 3).reshape(batch_size, neighbor_feat.size(2)* negative_num, -1)
-        head_feat = head_feat.permute(1, 2, 0, 3).reshape(batch_size, negative_num, -1)
-        cos_sim = torch.bmm(neighbor_feat, head_feat.permute(0, 2, 1))
         # batch_size * (node_num - 1 * (neightbor_num + 1)) * (1 * (neighbor_num + 1))
 
         #print(src.shape, encoder_outputs.shape, head_feat.shape)
@@ -527,4 +499,4 @@ class AbsSummarizer(nn.Module):
         dec_state = self.decoder.init_decoder_state(dec_src, dec_output)
         #print (mask_src.shape)
         decoder_outputs, state = self.decoder(tgt[:, :-1], dec_output, dec_state)
-        return decoder_outputs, None, doc_word_cos_sim, cos_sim
+        return decoder_outputs, None, doc_word_cos_sim, doc_cos_sim
