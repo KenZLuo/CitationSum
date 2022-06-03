@@ -228,8 +228,11 @@ def generate_dgl_graph(args, paper_id, graph_struct, nodes_num):
     adj= preprocess_adj(adj).todense()
     #print(adj)
     #print(g)
-    adj = np.concatenate((adj, np.zeros(args.negative_number,nodes_num)), axis=0)
-    adj = np.concatenate((adj, np.zeros(args.negative_number, adj.shape(0))), axis=1)
+    adj = np.concatenate((adj, np.zeros((args.negative_number,nodes_num))), axis=0)
+    #adj = np.array(adj)
+    #print(adj, adj.shape)
+    adj = np.concatenate((adj, np.zeros((adj.shape[0],args.negative_number))), axis=1)
+    #print(adj)
     return adj
 
 def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_inp):
@@ -551,7 +554,7 @@ def format_calculate_abs(args):
                     sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
                     score_list_1, score_list_2 = generate_graph_inputs_abs(args, sub_graph_dict, graph_strut_dict, abstr)
             else:
-                print("abstr:", abstract)
+                #print("abstr:", abstract)
                 if corpus == "train":
                     sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
                     score_list_1, score_list_2 = generate_graph_inputs_abs(args, sub_graph_dict, graph[corpus], abstr)
@@ -562,7 +565,7 @@ def format_calculate_abs(args):
                 scores_1 += score_list_1
                 scores_2 += score_list_2
 
-        print(np.array(scores_1).mean(), np.array(scores_2).mean())
+        #print(np.array(scores_1).mean(), np.array(scores_2).mean())
 
 def _format_cite(params):
     corpus_type, pid, abstract, introduce, sub_graph_dict, graph_text, neg_graph_text, node_num, args = params
@@ -831,7 +834,7 @@ def format_to_bert(args):
         for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
             real_name = json_f.split('/')[-1]
             a_lst.append((corpus_type, json_f, args, pjoin(args.save_path, real_name.replace('json', 'bert.pt'))))
-        print(a_lst)
+        #print(a_lst)
         pool = Pool(args.n_cpus)
         for d in pool.imap(_format_to_bert, a_lst):
             pass
