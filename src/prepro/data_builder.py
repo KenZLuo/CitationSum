@@ -11,11 +11,11 @@ import re
 import pandas as pd
 import time
 import dgl
+from scipy import sparse
 import subprocess
 from collections import Counter, deque
 from os.path import join as pjoin
 from nltk.tokenize import sent_tokenize, word_tokenize
-
 import torch
 from multiprocess import Pool
 
@@ -113,6 +113,20 @@ def load_xml(p):
     else:
         return None, None
 
+def normalize_adj(adj):
+    """Symmetrically normalize adjacency matrix."""
+    adj = sp.coo_matrix(adj)
+    rowsum = np.array(adj.sum(1))
+    d_inv_sqrt = np.power(rowsum, -0.5).flatten()
+    d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
+    d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
+    return adj.dot(d_mat_inv_sqrt).transpose().dot(d_mat_inv_sqrt).tocoo()
+
+
+def preprocess_adj(adj):
+    """Preprocessing of adjacency matrix for simple GCN model and conversion to tuple representation."""
+    adj_normalized = normalize_adj(adj)
+    return adj_normalized
 
 def tokenize(args):
     stories_dir = os.path.abspath(args.raw_path)
@@ -210,8 +224,10 @@ def generate_dgl_graph(paper_id, graph_struct, nodes_num):
         neighbor.append(index)
         key_nodes = [index] * len(neighbor)
         g.add_edges(key_nodes, neighbor)
+    adj = g.adjacency_matrix_scipy(return_edge_ids=False).astype(float)
+    adj= preprocess_adj(adj)
     #print(g)
-    return g
+    return adj.todense()
 
 def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_inp):
     graph_inputs = []

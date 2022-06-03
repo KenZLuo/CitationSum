@@ -14,6 +14,7 @@ from models.decoder import TransformerDecoder
 from models.encoder import Classifier, ExtTransformerEncoder
 from models.optimizers import Optimizer
 from fastNLP.core import seq_len_to_mask
+from scipy import sparse
 
 def build_optim(args, model, checkpoint):
     """ Build optimizer """
@@ -480,8 +481,8 @@ class AbsSummarizer(nn.Module):
         neg_graph_features = neg_graph_features.reshape(batch_size, nn, -1)
 
 
-
         graph_features = torch.cat([graph_features, neg_graph_features], dim=1)
+
         # graph_features = graph_features.reshape((nn+1)*negative_num, batch_size, -1)
         # (node_num x negative_num) x batch_size x hidden_size
         norm_graph_features = graph_features / (graph_features.norm(dim=-1)[:, :, None])
