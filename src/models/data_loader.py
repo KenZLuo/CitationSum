@@ -51,15 +51,12 @@ class Batch(object):
 
     def _pad_graph(self, graph_inputs):
         #print(max_len)
-        pad_graph_inputs = []
-        graph_input_len = []
-        node_num = []
-        max_node_num = max([graph_input.shape(0) for graph_input in graph_inputs])
+        max_node_num = max([graph_input.shape[0] for graph_input in graph_inputs])
         graph = []
         for graph_input in graph_inputs:
-            pad_arr_row = np.zeros(max_node_num-graph_input.shape(0), graph_input.shape(0))
+            pad_arr_row = np.zeros(max_node_num-graph_input.shape[0], graph_input.shape[0])
             each_graph = np.concatenate((graph_input, pad_arr_row), axis=0)
-            pad_arr_col = np.zeros(max_node_num - graph_input.shape(1), graph_input.shape(0))
+            pad_arr_col = np.zeros(max_node_num - graph_input.shape[1], graph_input.shape[0])
             each_graph = np.concatenate((each_graph, pad_arr_col), axis=1)
             graph.append(each_graph)
         return graph
