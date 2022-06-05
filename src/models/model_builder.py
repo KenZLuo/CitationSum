@@ -440,6 +440,7 @@ class AbsSummarizer(nn.Module):
         # graph_len = B x node_num x negative_sample+1
         #all_features = []
         batch_size, nn, max_len = graph_src.size()
+        #print(graph_src.size())
         _, negative_num, _ = neg_graph_src.size()
         graph_batch = graph_src.reshape(-1, graph_src.size(-1))
         len_batch = (graph_len.reshape(-1) == 0)
@@ -462,8 +463,9 @@ class AbsSummarizer(nn.Module):
         graph_features = graph_features.reshape(batch_size,nn, -1)
         #self_features = node_features.permute(1, 0, 2)
         #print (self_features.shape, graph_features.shape, batch_size, nn, negative_num, max_len)
+        #print(neighbor_node_num)
+        #print(node_features.shape, graph_features.shape)
         graph_features = torch.cat([node_features, graph_features], dim=1)
-
         neg_graph_batch = neg_graph_src.reshape(-1, neg_graph_src.size(-1))
         len_batch = (neg_graph_len.reshape(-1) == 0)
         neg_graph_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
@@ -478,12 +480,9 @@ class AbsSummarizer(nn.Module):
                 neg_graph_enc_outputs = torch.cat([neg_graph_enc_outputs, geo])
                 neg_graph_hidden = torch.cat([neg_graph_hidden, gh])
         neg_graph_features = self.pooling(neg_graph_hidden, neg_graph_enc_outputs)
-        neg_graph_features = neg_graph_features.reshape(batch_size, nn, -1)
-
-
+        neg_graph_features = neg_graph_features.reshape(batch_size, negative_num, -1)
+        #print(graph_features.shape, neg_graph_features.shape)
         graph_features = torch.cat([graph_features, neg_graph_features], dim=1)
-
-
         # graph_features = graph_features.reshape((nn+1)*negative_num, batch_size, -1)
         # (node_num x negative_num) x batch_size x hidden_size
         norm_graph_features = graph_features / (graph_features.norm(dim=-1)[:, :, None])

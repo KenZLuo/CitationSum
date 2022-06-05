@@ -257,6 +257,7 @@ class NMTLossCompute(LossComputeBase):
             mask_graph_row = torch.tile(mask_vec.unsqueeze(1), (1,nn,1))
             mask_graph_col = torch.tile(mask_vec.unsqueeze(2), (1, 1,nn))
             mask_graph = mask_graph_row*mask_graph_col
+            print(cos_sim)
             contra_loss = self._ncontrast(cos_sim, graph, mask_graph)
         else:
             doc_word_contra_loss = 0.0

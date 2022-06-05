@@ -235,8 +235,7 @@ class Trainer(object):
             neg_graph_len = batch.neg_graph_src_len
             neg_node_num = batch.neg_node_num
             #print(mask_src)
-            outputs, scores, doc_word_cos_sim, cos_sim = self.model\
-                (src, tgt, mask_src, graph_src, graph_len, node_num, neg_graph_src, neg_graph_len, neg_node_num)
+            outputs, scores, doc_word_cos_sim, cos_sim = self.model(src, tgt, mask_src, graph_src, graph_len, node_num, neg_graph_src, neg_graph_len)
             batch_stats = self.loss.sharded_compute_loss(batch,
                                                          outputs, self.args.generator_shard_size, normalization, mask_src,
                                                          node_num, graph, cos_sim, doc_word_cos_sim)

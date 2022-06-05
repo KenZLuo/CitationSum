@@ -28,25 +28,33 @@ class Batch(object):
         # sample and negative samples of the same node together.
         # Notice that node num and token num is not the same in each graph
         # rtn_data max_node_num x sample_num x max_token_num
-        # each_input_len node_num x sample_num x 1
-
+        # each_input_len node_num x sample_num x
+        #print(max_len)
         for graph_input in graph_inputs:
             e_rtn_data = []
             e_input_len = []
             for i in range(max_node_num):
                 if i < len(graph_input):
-                    e_rtn_data.append(graph_input[i] + [pad_id] * (max_len - len(graph_input)))
-                    e_input_len.append(len(graph_input[i]))
+                    each_graph_i = [j for sub in graph_input[i] for j in sub ]
+                    if len(each_graph_i) < max_len:
+                        e_rtn_data.append(each_graph_i + [pad_id] * (max_len - len(each_graph_i)))
+                        e_input_len.append(len(each_graph_i))
+                    else:
+                        e_rtn_data.append(each_graph_i[:max_len])
+                        e_input_len.append(max_len)
                 else:
                     #print(graph_input)
                     e_rtn_data.append([pad_id] *max_len)
                     e_input_len.append(0)
             #rtn_data = [g + [pad_id] * (max_len - len(g)) for g in graph_input]
+            #print(e_rtn_data)
+            #print(e_input_len)
             pad_graph_inputs.append(e_rtn_data)
             graph_input_len.append(e_input_len)
             node_num.append(len(graph_input)+1)
         #print(pad_graph_inputs)
         #print(graph_input_len)
+        #print(node_num)
         return torch.tensor(pad_graph_inputs), torch.tensor(graph_input_len), torch.tensor(node_num)
 
     def _pad_graph(self, graph_inputs):
@@ -54,12 +62,14 @@ class Batch(object):
         max_node_num = max([graph_input.shape[0] for graph_input in graph_inputs])
         graph = []
         for graph_input in graph_inputs:
-            pad_arr_row = np.zeros(max_node_num-graph_input.shape[0], graph_input.shape[0])
+            pad_arr_row = np.zeros((max_node_num-graph_input.shape[0], graph_input.shape[0]))
             each_graph = np.concatenate((graph_input, pad_arr_row), axis=0)
-            pad_arr_col = np.zeros(max_node_num - graph_input.shape[1], graph_input.shape[0])
+            pad_arr_col = np.zeros((each_graph.shape[0], max_node_num - graph_input.shape[1]))
             each_graph = np.concatenate((each_graph, pad_arr_col), axis=1)
-            graph.append(each_graph)
-        return graph
+            #print(each_graph)
+            graph.append(each_graph.tolist())
+        #print(graph)
+        return torch.tensor(graph)
 
     def __init__(self, args, data=None, device=None, is_test=False):
         """Create a Batch from a list of examples."""
@@ -78,7 +88,7 @@ class Batch(object):
             tgt = torch.tensor(self._pad(pre_tgt, 0))
             graph_src, graph_src_len, node_num = self._pad_graph_inputs(pre_graph_src, 0, args.max_graph_pos)
             neg_graph_src, neg_graph_src_len, neg_node_num = self._pad_graph_inputs(pre_neg_graph_src, 0, args.max_graph_pos)
-            graph = torch.tensor(self._pad_graph(pre_graph))
+            graph = self._pad_graph(pre_graph)
            # print(len(graph_src))
             segs = torch.tensor(self._pad(pre_segs, 0))
             mask_src = ~(src == 0)
