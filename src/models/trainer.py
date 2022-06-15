@@ -197,14 +197,14 @@ class Trainer(object):
                 # segs = batch.segs
                 # clss = batch.clss
                 mask_src = batch.mask_src
-                mask_tgt = batch.mask_tgt
-                # mask_cls = batch.mask_cls
                 graph_src = batch.graph_src
+                neg_graph_src = batch.neg_graph_src
                 graph = batch.graph
-                graph_len = batch.graph_src_len
+                graph_len = batch.graph_src_len        
                 node_num = batch.node_num
-                # print(mask_src)
-                outputs, _,_,_= self.model(src, tgt, mask_src, graph_src, graph, graph_len, node_num)
+                neg_graph_len = batch.neg_graph_src_len
+                   # print(mask_src)
+                outputs, _,_,_= self.model(src, tgt, mask_src, graph_src, graph_len, node_num, neg_graph_src, neg_graph_len)
 
                 batch_stats = self.loss.monolithic_compute_loss(batch,outputs,mask_src,node_num)
                 stats.update(batch_stats)

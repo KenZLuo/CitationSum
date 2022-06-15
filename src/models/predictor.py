@@ -232,9 +232,11 @@ class Translator(object):
         segs = batch.segs
         mask_src = batch.mask_src
         graph_src = batch.graph_src
+        neg_graph_src = batch.neg_graph_src
         graph = batch.graph
         graph_len = batch.graph_src_len
         node_num = batch.node_num
+        neg_graph_len = batch.neg_graph_src_len
 
         src_features, src_hidden_features = self.model.bert(src, mask_src)
         node_features = [self.model.pooling(src_hidden_features, src_features)]
@@ -243,7 +245,8 @@ class Translator(object):
         if neighbor_node_num == 0:
             dec_states = self.model.decoder.init_decoder_state(src, src_features, with_cache=True)
         else:
-            batch_size, nn, negative_num, max_len = graph_src.size()
+            batch_size, nn, max_len = graph_src.size()
+            _, negative_num, _ = neg_graph_src.size()
             graph_batch = graph_src.reshape(-1, graph_src.size(-1))
             len_batch = (graph_len.reshape(-1) == 0)
             graph_enc_mask = seq_len_to_mask(len_batch, max_len=self.args.max_graph_pos)
@@ -251,17 +254,16 @@ class Translator(object):
             graph_enc_masks = graph_enc_mask.split(400)
             graph_enc_outputs, graph_hidden = None, None
             for bat, mask in zip(graph_batches, graph_enc_masks):
-                geo, gh = self.model.bert(bat, mask)
+                geo, gh = self.bert(bat, mask)
                 if graph_enc_outputs is None:
                     graph_enc_outputs, graph_hidden = geo, gh
                 else:
                     graph_enc_outputs = torch.cat([graph_enc_outputs, geo])
                     graph_hidden = torch.cat([graph_hidden, gh])
-            graph_enc_out = graph_enc_outputs.reshape(batch_size, nn, negative_num, max_len, -1)
-            graph_enc_out = graph_enc_out[:, :, 0:1, :, :].squeeze(2)
+            graph_enc_out = graph_enc_outputs.reshape(batch_size, nn, max_len, -1)
             graph_enc_out = graph_enc_out.reshape(batch_size, nn * max_len, -1)
-            graph_f = graph_src[:, :, 0:1, :].squeeze(2)
-            graph_f = graph_f.reshape(batch_size, -1)
+            graph_f = graph_src.reshape(batch_size, -1)
+
             dec_src = torch.cat([src, graph_f], dim=1)
             src_features = torch.cat([src_features, graph_enc_out], dim=1)
             dec_states = self.model.decoder_with_graph.init_decoder_state(dec_src, src_features, with_cache=True)
