@@ -6,6 +6,7 @@ This includes: LossComputeBase and the standard NMTLossCompute, and
 """
 from __future__ import division
 import torch
+import GPUtil
 import wandb
 import torch.nn as nn
 import torch.nn.functional as F
@@ -134,7 +135,9 @@ class LossComputeBase(nn.Module):
             batch_stats.update(stats)
             del loss
             del stats
+        del graph
         del shard_state
+        torch.cuda.empty_cache()
 
         return batch_stats
 
@@ -226,14 +229,22 @@ class NMTLossCompute(LossComputeBase):
             "target": batch.tgt[:,1:],
         }
 
-    def _ncontrast(x_dis, adj_label, mask_graph, tau=1):
+    def _ncontrast(self, x_dis, adj_label,mask_graph, tau=1):
         """
         compute the Ncontrast loss
         """
         x_dis = torch.exp(tau * x_dis)
-        x_dis_sum = torch.sum(x_dis * mask_graph, 1)
+        x_dis_sum = torch.sum(x_dis*mask_graph, 1)
+        #print(x_dis.shape, mask_graph.shape, adj_label.shape)
         x_dis_sum_pos = torch.sum(x_dis * adj_label, 1)
-        loss = -torch.log(x_dis_sum_pos * (x_dis_sum ** (-1)) + 1e-8).mean()
+        reverse_x_dis_sum = x_dis_sum.masked_fill(x_dis_sum == 0, 1) ** (-1)
+        cum_prod = x_dis_sum_pos * reverse_x_dis_sum
+        cum_prod = cum_prod.masked_fill(x_dis_sum == 0, 1)
+        del x_dis_sum
+        del x_dis_sum_pos
+        del reverse_x_dis_sum
+        loss = -torch.log(cum_prod)
+        loss = loss.mean()
         return loss
 
     def _compute_loss(self, batch, output, target, mask_src, node_num, graph, cos_sim=None, doc_word_cos_sim=None):
@@ -253,11 +264,24 @@ class NMTLossCompute(LossComputeBase):
 
             nn = cos_sim.size(-2)
             #print(cos_sim.shape,nn,batch_size, negative_num)
+            #print("contra_loss")
+            #print(graph)
+            #contra_loss = 0.0
+            #for i in len(graph):
+            #    each_graph = graph[i]
+                #each_graph = np.concatenate((graph[i], np.zeros(2,node_num[i])), axis=0) 
+                #each_graph = np.concatenate((each_graph, np.zeros((each_graph.shape[0],2))), axis=1)
+            #each_contra_loss = self._ncontrast(cos_sim[i,:node_num[i]+2,:node_num[i]+2], each_graph)
+            #contra_loss += each_contra_loss
+            #contra_loss = contra_loss/len(graph)
+            #print("contra_loss:", contra_loss)
             mask_vec = seq_len_to_mask(node_num, max_len=nn).to(cos_sim.device)
             mask_graph_row = torch.tile(mask_vec.unsqueeze(1), (1,nn,1))
             mask_graph_col = torch.tile(mask_vec.unsqueeze(2), (1, 1,nn))
             mask_graph = mask_graph_row*mask_graph_col
-            print(cos_sim)
+            #print(cos_sim)
+            #print(cos_sim.shape, mask_graph.shape)
+            #print(graph.shape)
             contra_loss = self._ncontrast(cos_sim, graph, mask_graph)
         else:
             doc_word_contra_loss = 0.0

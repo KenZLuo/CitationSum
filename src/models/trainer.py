@@ -9,7 +9,8 @@ import GPUtil
 import wandb
 import distributed
 from models.reporter import ReportMgr, Statistics
-from others.logging import logger
+# from others.logging import logger
+from loguru import logger
 from others.utils import test_rouge, rouge_results_to_str
 
 
@@ -43,7 +44,7 @@ def build_trainer(args, device_id, model, optims,loss):
         gpu_rank = 0
         n_gpu = 0
 
-    print('gpu_rank %d' % gpu_rank)
+    logger.info('gpu_rank %d' % gpu_rank)
 
     tensorboard_log_dir = args.model_path
 
@@ -236,21 +237,23 @@ class Trainer(object):
             neg_node_num = batch.neg_node_num
             #print(mask_src)
             outputs, scores, doc_word_cos_sim, cos_sim = self.model(src, tgt, mask_src, graph_src, graph_len, node_num, neg_graph_src, neg_graph_len)
+            #if cos_sim is not None:
+                #print (graph.shape, cos_sim.shape, neg_node_num)
             batch_stats = self.loss.sharded_compute_loss(batch,
                                                          outputs, self.args.generator_shard_size, normalization, mask_src,
                                                          node_num, graph, cos_sim, doc_word_cos_sim)
-            #try:
-            #    if batch_stats.contra_loss != 0.0:
-            #        wandb.log({"loss": batch_stats.loss, "contra_loss": batch_stats.contra_loss, "doc_word_contra_loss": batch_stats.doc_word_contra_loss})
-            #except Exception as e:
-            #    print (e)
-            #    experiment = wandb.init(
-            #        project="ci-sum",
-            #        entity="jimin",
-            #        job_type="test",
-            #    )
-            #    if batch_stats.contra_loss != 0.0:
-            #        wandb.log({"loss": batch_stats.loss, "contra_loss": batch_stats.contra_loss, "doc_word_contra_loss": batch_stats.doc_word_contra_loss})
+            # try:
+            #     if batch_stats.contra_loss != 0.0:
+                    # wandb.log({"loss": batch_stats.loss, "contra_loss": batch_stats.contra_loss, "doc_word_contra_loss": batch_stats.doc_word_contra_loss})
+            # except Exception as e:
+            #     print (e)
+            #     experiment = wandb.init(
+            #         project="ci-sum",
+            #         entity="jimin",
+            #         job_type="test",
+            #     )
+            #     if batch_stats.contra_loss != 0.0:
+            #         wandb.log({"loss": batch_stats.loss, "contra_loss": batch_stats.contra_loss, "doc_word_contra_loss": batch_stats.doc_word_contra_loss})
             batch_stats.n_docs = int(src.size(0))
 
             total_stats.update(batch_stats)

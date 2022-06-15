@@ -38,10 +38,10 @@ if __name__ == '__main__':
 
     parser.add_argument("-batch_size", default=140, type=int)
     parser.add_argument("-test_batch_size", default=200, type=int)
-    parser.add_argument("-max_neighbour", default=8, type=int)
-    parser.add_argument("-negative_number", default=1, type=int)
+    parser.add_argument("-max_neighbour", default=4, type=int)
+    parser.add_argument("-negative_number", default=2, type=int)
     parser.add_argument("-max_pos", default=1024, type=int)
-    parser.add_argument("-max_graph_pos", default=300, type=int)
+    parser.add_argument("-max_graph_pos", default=200, type=int)
     parser.add_argument("-use_interval", type=str2bool, nargs='?',const=True,default=True)
     parser.add_argument("-large", type=str2bool, nargs='?',const=True,default=False)
     parser.add_argument("-load_from_extractive", default='', type=str)
@@ -73,7 +73,7 @@ if __name__ == '__main__':
     parser.add_argument("-ext_ff_size", default=2048, type=int)
 
     parser.add_argument("-label_smoothing", default=0.1, type=float)
-    parser.add_argument("-generator_shard_size", default=32, type=int)
+    parser.add_argument("-generator_shard_size", default=64, type=int)
     parser.add_argument("-alpha",  default=0.6, type=float)
     parser.add_argument("-beam_size", default=5, type=int)
     parser.add_argument("-min_length", default=15, type=int)
@@ -126,11 +126,11 @@ if __name__ == '__main__':
     init_logger(args.log_file)
     device = "cpu" if args.visible_gpus == '-1' else "cuda"
     device_id = 0 if device == "cuda" else -1
-    experiment = wandb.init(
-        project="ci-sum",
-        entity="jimin",
-        job_type="test",
-    )
+    # experiment = wandb.init(
+    #     project="ci-sum",
+    #     entity="jimin",
+    #     job_type="test",
+    # )
 
     if (args.task == 'abs'):
         if (args.mode == 'train'):

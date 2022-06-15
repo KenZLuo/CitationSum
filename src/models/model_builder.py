@@ -423,7 +423,6 @@ class AbsSummarizer(nn.Module):
             # del hcb
             # torch.cuda.empty_cache()
 
-        #print(src.shape, mask_src.shape)
         node_features = self.pooling(h_cnode_batch, encoder_outputs)
         #node_features = [hidden_outputs]
         # node_num = B x 1
@@ -496,6 +495,6 @@ class AbsSummarizer(nn.Module):
         dec_src=torch.cat([src,graph_f],dim=1)
         dec_output = torch.cat([encoder_outputs,graph_enc_out],dim=1)
         dec_state = self.decoder.init_decoder_state(dec_src, dec_output)
-        #print (mask_src.shape)
+        # print (mask_src.shape)
         decoder_outputs, state = self.decoder(tgt[:, :-1], dec_output, dec_state)
         return decoder_outputs, None, doc_word_cos_sim, doc_cos_sim

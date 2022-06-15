@@ -8,7 +8,8 @@ import sys
 import wandb
 
 from distributed import all_gather_list
-from others.logging import logger
+from loguru import logger
+# from others.logging import logger
 
 
 def build_report_manager(opt):
@@ -124,11 +125,12 @@ class ReportMgr(ReportMgrBase):
         report_stats.output(step, num_steps,
                             learning_rate, self.start_time)
 
+
         # Log the progress using the number of batches on the x-axis.
-        self.maybe_log_tensorboard(report_stats,
-                                   "progress",
-                                   learning_rate,
-                                   step)
+        # self.maybe_log_tensorboard(report_stats,
+        #                            "progress",
+        #                            learning_rate,
+        #                            step)
         report_stats = Statistics()
 
         return report_stats
@@ -208,9 +210,9 @@ class Statistics(object):
             our_stats(list([`Statistics`])): list of updated stats
         """
         # Get a list of world_size lists with len(stat_list) Statistics objects
+        our_rank = get_rank()
         all_stats = all_gather_list(stat_list, max_size=max_size)
 
-        our_rank = get_rank()
         our_stats = all_stats[our_rank]
         for other_rank, stats in enumerate(all_stats):
             if other_rank == our_rank:

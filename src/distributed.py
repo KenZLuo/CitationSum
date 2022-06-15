@@ -11,7 +11,7 @@ import pickle
 
 import torch.distributed
 
-from others.logging import logger
+from loguru import logger
 
 
 def is_master(gpu_ranks, device_id):
@@ -19,16 +19,17 @@ def is_master(gpu_ranks, device_id):
 
 
 def multi_init(device_id, world_size,gpu_ranks):
-    print(gpu_ranks)
-    dist_init_method = 'tcp://localhost:10000'
+    dist_init_method = 'tcp://localhost:10001'
     dist_world_size = world_size
+    torch.cuda.set_device(gpu_ranks[device_id])
     torch.distributed.init_process_group(
         backend='nccl', init_method=dist_init_method,
         world_size=dist_world_size, rank=gpu_ranks[device_id])
     gpu_rank = torch.distributed.get_rank()
     if not is_master(gpu_ranks, device_id):
     #     print('not master')
-        logger.disabled = True
+        from others.logging import logger as lr
+        lr.disabled = True
 
     return gpu_rank
 

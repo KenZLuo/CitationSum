@@ -4,6 +4,7 @@
 """
 from __future__ import division
 
+import GPUtil
 import argparse
 import glob
 import os
@@ -330,5 +331,6 @@ def train_abs_single(args, device_id):
                           label_smoothing=args.label_smoothing)
 
     trainer = build_trainer(args, device_id, model, optim, train_loss)
+    GPUtil.showUtilization()
 
     trainer.train(train_iter_fct, args.train_steps)

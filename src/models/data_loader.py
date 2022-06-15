@@ -35,13 +35,13 @@ class Batch(object):
             e_input_len = []
             for i in range(max_node_num):
                 if i < len(graph_input):
-                    each_graph_i = [j for sub in graph_input[i] for j in sub ]
-                    if len(each_graph_i) < max_len:
-                        e_rtn_data.append(each_graph_i + [pad_id] * (max_len - len(each_graph_i)))
-                        e_input_len.append(len(each_graph_i))
-                    else:
-                        e_rtn_data.append(each_graph_i[:max_len])
-                        e_input_len.append(max_len)
+                    #each_graph_i = [j for sub in graph_input[i] for j in sub ]
+                    #if len(each_graph_i) < max_len:
+                    e_rtn_data.append(graph_input[i] + [pad_id] * (max_len - len(graph_input[i])))
+                    e_input_len.append(len(graph_input[i]))
+                    #else:
+                    #e_rtn_data.append(each_graph_i[:max_len])
+                    #e_input_len.append(max_len)
                 else:
                     #print(graph_input)
                     e_rtn_data.append([pad_id] *max_len)
@@ -60,34 +60,43 @@ class Batch(object):
     def _pad_graph(self, graph_inputs):
         #print(max_len)
         max_node_num = max([graph_input.shape[0] for graph_input in graph_inputs])
-        graph = []
-        for graph_input in graph_inputs:
-            pad_arr_row = np.zeros((max_node_num-graph_input.shape[0], graph_input.shape[0]))
-            each_graph = np.concatenate((graph_input, pad_arr_row), axis=0)
-            pad_arr_col = np.zeros((each_graph.shape[0], max_node_num - graph_input.shape[1]))
-            each_graph = np.concatenate((each_graph, pad_arr_col), axis=1)
-            #print(each_graph)
-            graph.append(each_graph.tolist())
-        #print(graph)
-        return torch.tensor(graph)
+        #print("max_node_num:", max_node_num)
+        if max_node_num==1:
+            return torch.empty(len(graph_inputs),1)
+        else:
+            graph = []
+            max_node_num = max_node_num + self.neg_num
+            #print(max_node_num)
+            for graph_input in graph_inputs:
+                pad_arr_row = np.zeros((max_node_num-graph_input.shape[0], graph_input.shape[0]))
+                each_graph = np.concatenate((graph_input, pad_arr_row), axis=0)
+                pad_arr_col = np.zeros((each_graph.shape[0], max_node_num - graph_input.shape[1]))
+                each_graph = np.concatenate((each_graph, pad_arr_col), axis=1)
+                graph.append(each_graph.tolist())
+            return torch.tensor(graph)
 
     def __init__(self, args, data=None, device=None, is_test=False):
         """Create a Batch from a list of examples."""
+        self.neg_num = args.negative_number
         if data is not None:
             self.batch_size = len(data)
             pre_src = [x[0] for x in data]
+            #print(pre_src[0])
             pre_tgt = [x[1] for x in data]
             pre_segs = [x[2] for x in data]
             pre_clss = [x[3] for x in data]
             pre_src_sent_labels = [x[4] for x in data]
-            pre_graph_src = [x[5] for x in data]
+            pre_graph_src = [x[5][:args.max_neighbour] for x in data]
+            #print(pre_graph_src[0])
             pre_neg_graph_src = [x[6] for x in data]
-            pre_graph = [x[7] for x in data]
+            pre_graph = [x[7][:args.max_neighbour+1,:args.max_neighbour+1] for x in data]
 
             src = torch.tensor(self._pad(pre_src, 0))
             tgt = torch.tensor(self._pad(pre_tgt, 0))
             graph_src, graph_src_len, node_num = self._pad_graph_inputs(pre_graph_src, 0, args.max_graph_pos)
+            #print('neg:', pre_neg_graph_src)
             neg_graph_src, neg_graph_src_len, neg_node_num = self._pad_graph_inputs(pre_neg_graph_src, 0, args.max_graph_pos)
+            #print("pad neg:", neg_graph_src)
             graph = self._pad_graph(pre_graph)
            # print(len(graph_src))
             segs = torch.tensor(self._pad(pre_segs, 0))
@@ -279,10 +288,11 @@ class DataIterator(object):
             #new_s.append(s[0]+s[1]+s[2])
             #new_s.append(s[3])
             #new_s.append(s[4])
+            #print(s)
             if s == []:
                 each_src = s
             else:
-                each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in s]
+                each_src = s[:-1][:self.args.max_graph_pos - 1] + end_id
             graph_src_max.append(each_src)
 
         neg_graph_src_max = []
@@ -294,7 +304,7 @@ class DataIterator(object):
             if s == []:
                 each_src = s
             else:
-                each_src = [each_s[:-1][:self.args.max_graph_pos - 1] + end_id for each_s in s]
+                each_src = s[:-1][:self.args.max_graph_pos - 1] + end_id
             neg_graph_src_max.append(each_src)
 
         #graph_src = [s[:-1][:self.args.max_graph_pos - 1] + end_id for s in graph_src]
