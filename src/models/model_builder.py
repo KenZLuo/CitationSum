@@ -329,6 +329,8 @@ class AbsSummarizer(nn.Module):
         self.args = args
         self.device = device
         self.bert = Bert(args.large, args.temp_dir, args.finetune_bert)
+        self.vocab_size = self.bert.model.config.vocab_size + 3
+        self.bert.model.resize_token_embeddings(self.vocab_size)
         self.gnnEncoder = GNNEncoder(args)
         self.join = nn.Linear(2 * self.bert.model.config.hidden_size, self.args.hidden_dim)
         self.cos = nn.CosineSimilarity(dim=2, eps=1e-6)
@@ -350,7 +352,7 @@ class AbsSummarizer(nn.Module):
             my_pos_embeddings.weight.data[:512] = self.bert.model.embeddings.position_embeddings.weight.data
             my_pos_embeddings.weight.data[512:] = self.bert.model.embeddings.position_embeddings.weight.data[-1][None,:].repeat(args.max_pos-512,1)
             self.bert.model.embeddings.position_embeddings = my_pos_embeddings
-        self.vocab_size = self.bert.model.config.vocab_size
+
         tgt_embeddings = nn.Embedding(self.vocab_size, self.bert.model.config.hidden_size, padding_idx=0)
         if (self.args.share_emb):
             tgt_embeddings.weight = copy.deepcopy(self.bert.model.embeddings.word_embeddings.weight)

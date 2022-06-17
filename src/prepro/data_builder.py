@@ -19,7 +19,8 @@ from os.path import join as pjoin
 from nltk.tokenize import sent_tokenize, word_tokenize
 import torch
 from multiprocess import Pool
-
+from others.tokenization import BertTokenizer
+from transformers import RobertaTokenizer, AutoTokenizer
 from others.logging import logger
 from others.tokenization import BertTokenizer
 from pytorch_transformers import XLNetTokenizer
@@ -570,7 +571,7 @@ def format_calculate_abs(args):
 def _format_cite(params):
     corpus_type, pid, abstract, introduce, sub_graph_dict, graph_text, neg_graph_text, node_num, args = params
     is_test = corpus_type == 'test'
-    bert = BertCiteData(args)
+    bert = PubBertCiteData(args)
     sent_labels, _ = greedy_selection(introduce[:args.max_src_nsents], abstract, 6)
     graph = generate_dgl_graph(args, pid, sub_graph_dict, node_num)
     #print(graph.nodes(),graph.edges())
@@ -746,6 +747,102 @@ class BertCiteData():
         self.sep_vid = tokenizer.vocab[self.sep_token]
         self.cls_vid = tokenizer.vocab[self.cls_token]
         self.pad_vid = tokenizer.vocab[self.pad_token]
+
+    def preprocess(self, src, tgt, sent_labels, graph_src, neg_graph_src, graph, use_bert_basic_tokenizer=False, is_test=False):
+
+        if ((not is_test) and len(src) == 0):
+            return None
+
+        original_src_txt = [' '.join(s) for s in src]
+
+        idxs = [i for i, s in enumerate(src) if (len(s) > self.args.min_src_ntokens_per_sent)]
+
+        _sent_labels = [0] * len(src)
+        for l in sent_labels:
+            _sent_labels[l] = 1
+
+        src = [src[i][:self.args.max_src_ntokens_per_sent] for i in idxs]
+        sent_labels = [_sent_labels[i] for i in idxs]
+        src = src[:self.args.max_src_nsents]
+        sent_labels = sent_labels[:self.args.max_src_nsents]
+        #graph_src = graph_src[:self.args.max_neighbor_num]
+
+        if ((not is_test) and len(src) < self.args.min_src_nsents):
+            return None
+
+        src_txt = [' '.join(sent) for sent in src]
+        text = ' {} {} '.format(self.sep_token, self.cls_token).join(src_txt)
+        graph_subtoken_idxs = []
+        neg_graph_subtoken_idxs=[]
+        if graph_src != []:
+            for each_graph_srcs in graph_src:
+                subtoken_idxs = []
+                #print("each_graph:", each_graph_srcs)
+                #for each_graph_src in each_graph_srcs:
+                each_src = [' '.join(sent) for sent in each_graph_srcs]
+                each_text = ' {} {} '.format(self.sep_token, self.cls_token).join(each_src)
+                each_graph_src_subtokens = tokenizer.tokenize(each_text)
+                each_graph_src_subtokens = [self.cls_token] + each_graph_src_subtokens + [self.sep_token]
+                each_graph_subtoken_idxs = tokenizer.convert_tokens_to_ids(each_graph_src_subtokens)
+                #subtoken_idxs.append(each_graph_subtoken_idxs)
+                #print(each_graph_subtoken_idxs)
+                graph_subtoken_idxs.append(each_graph_subtoken_idxs)
+
+            for each_graph_srcs in neg_graph_src:
+                #subtoken_idxs = []
+                #for each_graph_src in each_graph_srcs:
+                each_src = [' '.join(sent) for sent in each_graph_srcs]
+                each_text = ' {} {} '.format(self.sep_token, self.cls_token).join(each_src)
+                each_graph_src_subtokens = tokenizer.tokenize(each_text)
+                each_graph_src_subtokens = [self.cls_token] + each_graph_src_subtokens + [self.sep_token]
+                each_graph_subtoken_idxs = tokenizer.convert_tokens_to_ids(each_graph_src_subtokens)
+                #subtoken_idxs.append(each_graph_subtoken_idxs)
+                neg_graph_subtoken_idxs.append(each_graph_subtoken_idxs)
+
+        #print(graph_subtoken_idxs)
+        src_subtokens = tokenizer.tokenize(text)
+        src_subtokens = [self.cls_token] + src_subtokens + [self.sep_token]
+        src_subtoken_idxs = tokenizer.convert_tokens_to_ids(src_subtokens)
+        _segs = [-1] + [i for i, t in enumerate(src_subtoken_idxs) if t == self.sep_vid]
+        segs = [_segs[i] - _segs[i - 1] for i in range(1, len(_segs))]
+        segments_ids = []
+        for i, s in enumerate(segs):
+            if (i % 2 == 0):
+                segments_ids += s * [0]
+            else:
+                segments_ids += s * [1]
+        cls_ids = [i for i, t in enumerate(src_subtoken_idxs) if t == self.cls_vid]
+        sent_labels = sent_labels[:len(cls_ids)]
+
+        tgt_subtokens_str = '[unused0] ' + ' [unused2] '.join(
+            [' '.join(tokenizer.tokenize(' '.join(tt), use_bert_basic_tokenizer=use_bert_basic_tokenizer)) for tt in tgt]) + ' [unused1]'
+        tgt_subtoken = tgt_subtokens_str.split()[:self.args.max_tgt_ntokens]
+        if ((not is_test) and len(tgt_subtoken) < self.args.min_tgt_ntokens):
+            return None
+
+        tgt_subtoken_idxs = tokenizer.convert_tokens_to_ids(tgt_subtoken)
+
+        tgt_txt = '<q>'.join([' '.join(tt) for tt in tgt])
+        src_txt = [original_src_txt[i] for i in idxs]
+
+        return src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt, graph_subtoken_idxs, neg_graph_subtoken_idxs, graph
+
+class PubBertCiteData():
+    def __init__(self, args):
+        self.args = args
+        #self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+        model_name = 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract'
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.sep_token = '[SEP]'
+        self.cls_token = '[CLS]'
+        self.pad_token = '[PAD]'
+        self.tgt_bos = '[unused0]'
+        self.tgt_eos = '[unused1]'
+        self.tgt_sent_split = '[unused2]'
+        self.tokenizer.add_tokens([self.tgt_bos, self.tgt_eos, self.tgt_sent_split])
+        #self.sep_vid = self.tokenizer.vocab[self.sep_token]
+        #self.cls_vid = self.tokenizer.vocab[self.cls_token]
+        #self.pad_vid = self.tokenizer.vocab[self.pad_token]
 
     def preprocess(self, src, tgt, sent_labels, graph_src, neg_graph_src, graph, use_bert_basic_tokenizer=False, is_test=False):
 
