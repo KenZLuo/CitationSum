@@ -428,6 +428,7 @@ class AbsSummarizer(nn.Module):
         # node_num = B x 1
         neighbor_node_num = max(node_num - 1)
 
+        #print(neighbor_node_num)
         if neighbor_node_num == 0:
             # There is no nodes with neighbors
             # print ("Neighbor node zero calculation")
