@@ -291,7 +291,7 @@ class Trainer(object):
                 o.step()
 
 
-    def test(self, test_iter, step, cal_lead=False, cal_oracle=True):
+    def test(self, test_iter, step, cal_lead=False, cal_oracle=False):
         """ Validate model.
             valid_iter: validate data iterator
         Returns:

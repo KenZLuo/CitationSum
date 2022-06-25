@@ -112,7 +112,7 @@ class Translator(object):
             #                           attn[b], pred_score[b], gold_sent,
             #                           gold_score[b])
             # src = self.spm.DecodeIds([int(t) for t in translation_batch['batch'].src[0][5] if int(t) != len(self.spm)])
-            raw_src = [self.vocab.ids_to_tokens[int(t)] for t in src[b]][:500]
+            raw_src = [self.vocab.convert_ids_to_tokens(int(t)) for t in src[b]][:500]
             raw_src = ' '.join(raw_src)
             translation = (pred_sents, gold_sent, raw_src)
             # translation = (pred_sents[0], gold_sent)
@@ -151,7 +151,7 @@ class Translator(object):
 
                 for trans in translations:
                     pred, gold, src = trans
-                    pred_str = pred.replace('[unused0]', '').replace('[unused3]', '').replace('[PAD]', '').replace('[unused1]', '').replace(r' +', ' ').replace(' [unused2] ', '<q>').replace('[unused2]', '').strip()
+                    pred_str = pred.replace('[unused0]', '').replace('[unused3]', '').replace('[PAD]', '').replace('[unused1]', '').replace(r' +', ' ').replace(' [unused2] ', '<q>').replace('[unused2]', '').replace('[UNK]', '').replace('[CLS]', '').replace('[SEP]', '').replace('[MASK]', '').strip()
                     gold_str = gold.strip()
                     if(self.args.recall_eval):
                         _pred_str = ''
@@ -337,7 +337,8 @@ class Translator(object):
                     for i in range(alive_seq.size(0)):
                         fail = False
                         words = [int(w) for w in alive_seq[i]]
-                        words = [self.vocab.ids_to_tokens[w] for w in words]
+                        #words = [self.vocab.ids_to_tokens[w] for w in words]
+                        words = [self.vocab.convert_ids_to_tokens(w) for w in words]
                         words = ' '.join(words).replace(' ##','').split()
                         if(len(words)<=3):
                             continue

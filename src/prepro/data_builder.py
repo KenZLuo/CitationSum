@@ -33,7 +33,9 @@ import xml.etree.ElementTree as ET
 nyt_remove_words = ["photo", "graph", "chart", "map", "table", "drawing"]
 
 
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+#tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+model_name = 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract'
+tokenizer = AutoTokenizer.from_pretrained(model_name)
 def recover_from_corenlp(s):
     s = re.sub(r' \'{\w}', '\'\g<1>', s)
     s = re.sub(r'\'\' {\w}', '\'\'\g<1>', s)
@@ -274,13 +276,20 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
         for e_input in graph_inputs:
             tokenize_graph_input = e_input[:args.max_src_nsents]
             sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 8)
-            if 0.7 < r_score:
+            if 0.4 < r_score:
                 each_input = []
                 for i in sent_label:
                     each_input.append(tokenize_graph_input[i])
                 #each_input = [(each_s + " .").split() for each_s in each_input if each_s]
                 graph_inp.append(each_input)
-                #print(del_count, r_score)
+                print("r_score:", r_score)
+                print("references:", [[" ".join(s) for s in sent] for sent in graph_inp])
+                graph_i = graph_strut_dict[graph_struct[pid_inp][del_count]]["abstract"]
+                abs_list = graph_i.split(".")
+                abstr = [(each_s + " .").split() for each_s in abs_list if each_s]
+                _, a_score = greedy_selection(abstr, abstract, 8)
+                print("a_score:", a_score)
+                print("abstract_referece:", graph_i)
                 #print(graph_struct[pid_inp][del_count])
                 temp.append(graph_struct[pid_inp][del_count])
                 del_count += 1
@@ -405,28 +414,30 @@ def format_cite(args):
         for row in tqdm(json_main):
             row = json.loads(row)
             pid = row['pmid']
-            intro = row['full_text'].split(".")
-            introduction = [(each_s+" .").split() for each_s in intro if each_s]
-            abstract = row['abstract']
-            abs_list = abstract.split(".")
-            abstr = [(each_s+" .").split() for each_s in abs_list if each_s]
-            if args.setting == "transductive":
-                if corpus == "train":
-                    sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                    graph_text, neg_graph_text, sub_graph_dict = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[10:40], pid)
+            if pid == "15452138":
+                intro = row['full_text'].split(".")
+                introduction = [(each_s+" .").split() for each_s in intro if each_s]
+                abstract = row['abstract']
+                print("abstract:", abstract)
+                abs_list = abstract.split(".")
+                abstr = [(each_s+" .").split() for each_s in abs_list if each_s]
+                if args.setting == "transductive":
+                    if corpus == "train":
+                        sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
+                        graph_text, neg_graph_text, sub_graph_dict = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[10:40], pid)
+                    else:
+                        sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
+                        graph_text, neg_graph_text, sub_graph_dict = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[10:40], pid)
                 else:
-                    sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                    graph_text, neg_graph_text, sub_graph_dict = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[10:40], pid)
-            else:
-                if corpus == "train":
-                    sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                    graph_text, neg_graph_text, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[10:40], pid)
-                else:
-                    sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                    graph_text, neg_graph_text, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], introduction[10:40], pid)
+                    if corpus == "train":
+                        sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
+                        graph_text, neg_graph_text, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstr, pid)
+                    else:
+                        sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
+                        graph_text, neg_graph_text, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstr, pid)
 
-            node_num = len(graph_text) + 1
-            data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, neg_graph_text, node_num, args))
+                node_num = len(graph_text) + 1
+                data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, neg_graph_text, node_num, args))
         data_dict[corpus] = data_lst
 
     for d in dirs:
@@ -831,8 +842,8 @@ class PubBertCiteData():
     def __init__(self, args):
         self.args = args
         #self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
-        model_name = 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract'
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        #model_name = 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract'
+        self.tokenizer = tokenizer#AutoTokenizer.from_pretrained(model_name)
         self.sep_token = '[SEP]'
         self.cls_token = '[CLS]'
         self.pad_token = '[PAD]'
@@ -840,9 +851,9 @@ class PubBertCiteData():
         self.tgt_eos = '[unused1]'
         self.tgt_sent_split = '[unused2]'
         self.tokenizer.add_tokens([self.tgt_bos, self.tgt_eos, self.tgt_sent_split])
-        #self.sep_vid = self.tokenizer.vocab[self.sep_token]
-        #self.cls_vid = self.tokenizer.vocab[self.cls_token]
-        #self.pad_vid = self.tokenizer.vocab[self.pad_token]
+        self.sep_vid = self.tokenizer.vocab[self.sep_token]
+        self.cls_vid = self.tokenizer.vocab[self.cls_token]
+        self.pad_vid = self.tokenizer.vocab[self.pad_token]
 
     def preprocess(self, src, tgt, sent_labels, graph_src, neg_graph_src, graph, use_bert_basic_tokenizer=False, is_test=False):
 
@@ -911,7 +922,7 @@ class PubBertCiteData():
         sent_labels = sent_labels[:len(cls_ids)]
 
         tgt_subtokens_str = '[unused0] ' + ' [unused2] '.join(
-            [' '.join(tokenizer.tokenize(' '.join(tt), use_bert_basic_tokenizer=use_bert_basic_tokenizer)) for tt in tgt]) + ' [unused1]'
+            [' '.join(tokenizer.tokenize(' '.join(tt))) for tt in tgt]) + ' [unused1]'
         tgt_subtoken = tgt_subtokens_str.split()[:self.args.max_tgt_ntokens]
         if ((not is_test) and len(tgt_subtoken) < self.args.min_tgt_ntokens):
             return None

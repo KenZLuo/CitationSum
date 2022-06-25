@@ -5,7 +5,7 @@ import torch
 import GPUtil
 import torch.nn as nn
 import numpy as np
-from pytorch_transformers import BertModel, BertConfig
+from transformers import BertModel, BertConfig, AutoModel
 from torch.nn.init import xavier_uniform_
 from dgl.nn.pytorch import GATConv
 from dgl.nn.pytorch import GraphConv
@@ -120,12 +120,14 @@ def get_generator(vocab_size, dec_hidden_size, device):
     return generator
 
 class Bert(nn.Module):
-    def __init__(self, large, temp_dir, finetune=False):
+    def __init__(self, large, temp_dir, device, finetune=False):
         super(Bert, self).__init__()
         if(large):
             self.model = BertModel.from_pretrained('bert-large-uncased', cache_dir=temp_dir)
         else:
-            self.model = BertModel.from_pretrained('bert-base-uncased', cache_dir=temp_dir)
+            model_name = 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract'
+            self.model = AutoModel.from_pretrained(model_name,cache_dir=temp_dir).to(device)
+            #self.model = BertModel.from_pretrained('bert-base-uncased', cache_dir=temp_dir)
 
         self.finetune = finetune
 
@@ -136,17 +138,18 @@ class Bert(nn.Module):
                 h_cnode_batch = []
                 n = x.shape[1] // 512
                 for w in range(n+1):
-                    last_hidden, pool_out = self.model(input_ids=x[: , w*512: w*512 + 512],
+                    #last_hidden, pool_out i
+                    outputs = self.model(input_ids=x[: , w*512: w*512 + 512],
                             attention_mask= mask[: , w*512: w*512 + 512])
-                    encoder_outputs.append(last_hidden)
-                    h_cnode_batch.append(pool_out)
+                    encoder_outputs.append(outputs.last_hidden_state)
+                    h_cnode_batch.append(outputs.pooler_output)
                 encoder_outputs = torch.cat(encoder_outputs, dim=1)
                 h_cnode_batch = torch.max(torch.stack(h_cnode_batch, dim=0), dim=0)[0].squeeze(0)
             else:
                 #print(mask)
-                encoder_outputs, h_cnode_batch = self.model(input_ids=x,  attention_mask=mask)
-                #encoder_outputs = outputs.last_hidden_state
-                #h_cnode_batch = outputs.pooler_output
+                outputs = self.model(input_ids=x,  attention_mask=mask)
+                encoder_outputs = outputs.last_hidden_state
+                h_cnode_batch = outputs.pooler_output
         else:
             self.eval()
             with torch.no_grad():
@@ -155,17 +158,18 @@ class Bert(nn.Module):
                     h_cnode_batch = []
                     n = x.shape[1] // 512
                     for w in range(n+1):
-                        last_hidden, pool_output = self.model(input_ids=x[: , w*512: w*512 + 512],
+                        outputs = self.model(input_ids=x[: , w*512: w*512 + 512],
                                 attention_mask=mask[: , w*512: w*512 + 512])
-                        encoder_outputs.append(last_hidden)
-                        h_cnode_batch.append(pool_output)
+                        encoder_outputs.append(outputs.last_hidden_state)
+                        h_cnode_batch.append(outputs.pooler_output)
                         encoder_outputs = torch.cat(encoder_outputs, dim=1)
                         h_cnode_batch = torch.max(torch.stack(h_cnode_batch, dim=0), dim=0)[0].squeeze(0)
 
                 else:
-                    encoder_outputs, h_cnode_batch = self.model(x, attention_mask=mask)
-                    #encoder_outputs = outputs.last_hidden_state
-                    #h_cnode_batch = outputs.pooler_output
+                    #encoder_outputs, h_cnode_batch 
+                    outputs= self.model(x, attention_mask=mask)
+                    encoder_outputs = outputs.last_hidden_state
+                    h_cnode_batch = outputs.pooler_output
 
         return encoder_outputs, h_cnode_batch
 
@@ -328,7 +332,7 @@ class AbsSummarizer(nn.Module):
         super(AbsSummarizer, self).__init__()
         self.args = args
         self.device = device
-        self.bert = Bert(args.large, args.temp_dir, args.finetune_bert)
+        self.bert = Bert(args.large, args.temp_dir, device, args.finetune_bert)
         self.vocab_size = self.bert.model.config.vocab_size + 3
         self.bert.model.resize_token_embeddings(self.vocab_size)
         self.gnnEncoder = GNNEncoder(args)
