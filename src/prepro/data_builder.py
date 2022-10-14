@@ -276,7 +276,7 @@ def generate_graph_inputs(args, graph_struct, graph_strut_dict, abstract, pid_in
         for e_input in graph_inputs:
             tokenize_graph_input = e_input[:args.max_src_nsents]
             sent_label, r_score = greedy_selection(tokenize_graph_input, abstract, 8)
-            if 0.4 < r_score:
+            if 0.7 < r_score:
                 each_input = []
                 for i in sent_label:
                     each_input.append(tokenize_graph_input[i])
@@ -414,30 +414,30 @@ def format_cite(args):
         for row in tqdm(json_main):
             row = json.loads(row)
             pid = row['pmid']
-            if pid == "15452138":
-                intro = row['full_text'].split(".")
-                introduction = [(each_s+" .").split() for each_s in intro if each_s]
-                abstract = row['abstract']
-                print("abstract:", abstract)
-                abs_list = abstract.split(".")
-                abstr = [(each_s+" .").split() for each_s in abs_list if each_s]
-                if args.setting == "transductive":
-                    if corpus == "train":
-                        sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                        graph_text, neg_graph_text, sub_graph_dict = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[10:40], pid)
-                    else:
-                        sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
-                        graph_text, neg_graph_text, sub_graph_dict = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[10:40], pid)
-                else:
-                    if corpus == "train":
-                        sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                        graph_text, neg_graph_text, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstr, pid)
-                    else:
-                        sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
-                        graph_text, neg_graph_text, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstr, pid)
 
-                node_num = len(graph_text) + 1
-                data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, neg_graph_text, node_num, args))
+            intro = row['full_text'].split(".")
+            introduction = [(each_s+" .").split() for each_s in intro if each_s]
+            abstract = row['abstract']
+            print("abstract:", abstract)
+            abs_list = abstract.split(".")
+            abstr = [(each_s+" .").split() for each_s in abs_list if each_s]
+            if args.setting == "transductive":
+                if corpus == "train":
+                    sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
+                    graph_text, neg_graph_text, sub_graph_dict = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[10:40], pid)
+                else:
+                    sub_graph_dict = generate_graph_structs(args, pid, graph_strut_dict)
+                    graph_text, neg_graph_text, sub_graph_dict = generate_graph_inputs(args, sub_graph_dict, graph_strut_dict, introduction[10:40], pid)
+            else:
+                if corpus == "train":
+                    sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
+                    graph_text, neg_graph_text, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstr, pid)
+                else:
+                    sub_graph_dict = generate_graph_structs(args, pid, graph[corpus])
+                    graph_text, neg_graph_text, sub_graph_dict  = generate_graph_inputs(args, sub_graph_dict, graph[corpus], abstr, pid)
+
+            node_num = len(graph_text) + 1
+            data_lst.append((corpus, pid, abstr, introduction, sub_graph_dict, graph_text, neg_graph_text, node_num, args))
         data_dict[corpus] = data_lst
 
     for d in dirs:
