@@ -10,11 +10,6 @@ Some codes are from PreSum:https://github.com/nlpyang/PreSumm and CGSum: https:/
 **Package Requirements**: torch==1.1.0 pytorch_transformers tensorboardX multiprocess pyrouge
 
 ## Data Preparation For SSN
-### Option 1: download the processed data
-
-[Pre-processed data](https://drive.google.com/open?id=1DN7ClZCCXsk2KegmC6t4ClBwtAf5galI)
-
-unzip the zipfile and put all `.pt` files into `bert_data`
 
 #### Step 1 Download
 Download and unzip the SSN (including inductive and transductive) from [here](https://github.com/ChenxinAn-fdu/CGSum).
@@ -25,6 +20,9 @@ python preprocess.py -mode format_cite -raw_path RAW_PATH -save_path BERT_DATA_P
 ```
 
 * `RAW_PATH` is the directory containing raw files (`../inductive`), `BERT_DATA_PATH` is the target directory to save the generated binary files (`../bert_data`)
+
+## PubMedCite Dataset
+The citation graph records of our proposed PubMedCite dataset are in ```PubMedCite.zip```. Concerning the different licences of the documents in the dataset, we are unable to release the full articles with the citation graph. Please consider using the official API of [PubMed](https://pubmed.ncbi.nlm.nih.gov/download/) to fetch full data.
 
 ## Model Training
 
@@ -39,3 +37,5 @@ python train.py  -task abs -mode train -bert_data_path BERT_DATA_PATH -dec_dropo
 ```
  python train.py -task abs -mode validate -batch_size 3000 -test_batch_size 500 -bert_data_path BERT_DATA_PATH -log_file ../logs/val_ssn -model_path MODEL_PATH -sep_optim true -use_interval true -visible_gpus 1 -max_pos 640 -max_length 300 -alpha 0.95 -min_length 130 -result_path ../logs/
 ```
+
+
